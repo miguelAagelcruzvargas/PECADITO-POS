@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+.swal-btn-confirm {
+  background: #e02424;    /* rojo brillante */
+  color: #fff;
+  padding: 0.6em 1.4em;
+  border-radius: 0.4em;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.swal-btn-success {
+  background: #24e031;    /* rojo brillante */
+  color: #fff;
+  padding: 0.6em 1.4em;
+  border-radius: 0.4em;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.swal-btn-confirm:hover {
+  filter: brightness(1.1);
+}
+
+/* Botón cancelar (gris) */
+.swal-btn-cancel {
+  background: #6b7280;    /* gris */
+  color: #fff;
+  padding: 0.6em 1.4em;
+  border-radius: 0.4em;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.swal-btn-cancel:hover {
+  filter: brightness(1.1);
+}
+
+/* Botón “OK” del mensaje de éxito */
+.swal-btn-confirm-success {
+  background: #16a34a;    /* verde */
+  color: #fff;
+  padding: 0.6em 1.4em;
+  border-radius: 0.4em;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.swal-btn-confirm-success:hover {
+  filter: brightness(1.1);
+}
+
+/* Scroll interno para tablas (sin mostrar barra) */
+.table-scroll {
+  overflow: auto;
+  max-height: 70vh;
+  overscroll-behavior: contain;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.table-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}

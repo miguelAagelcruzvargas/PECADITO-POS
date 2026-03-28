@@ -1,0 +1,23 @@
+# Root ignores
+node_modules/
+client/node_modules/
+server/node_modules/
+.env
+.env.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+package-lock.json
+# build outputs
+client/dist/
+server/dist/
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+# uploads (keep if needed) comment out line below if you want to version them
+server/public/*.png
+server/public/*.jpg
+server/public/*.jpeg
+server/public/*.webp
