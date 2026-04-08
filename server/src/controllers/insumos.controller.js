@@ -40,7 +40,7 @@ export const createInsumo = async (req, res) => {
        VALUES (?, ?, ?, ?, ?)`,
       [
         String(nombre).trim(),
-        ['pza', 'g', 'ml'].includes(unidad) ? unidad : 'pza',
+        ['pza', 'g', 'ml', 'kg', 'L'].includes(unidad) ? unidad : 'pza',
         Number(stock_actual) || 0,
         Number(stock_minimo) || 0,
         negocioId,
@@ -76,7 +76,7 @@ export const updateInsumo = async (req, res) => {
        WHERE id = ?`,
       [
         nombre ?? null,
-        unidad && ['pza', 'g', 'ml'].includes(unidad) ? unidad : null,
+        unidad && ['pza', 'g', 'ml', 'kg', 'L'].includes(unidad) ? unidad : null,
         stock_actual !== undefined ? Number(stock_actual) : null,
         stock_minimo !== undefined ? Number(stock_minimo) : null,
         activo !== undefined ? Number(activo) : null,

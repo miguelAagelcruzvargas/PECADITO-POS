@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { loginRequest, verifyTokenRequest, logoutRequest, ObtenerUsuarios, registerRequest, ConfirmacionRequest, DeleteRequest, ActualizarUsuario, ActualizarPerfil, ObtenerValoresPorId } from "../api/usuarios.js";
 import Cookies from "js-cookie";
+import axios from "../api/axios";
+import Swal from "sweetalert2";
 
 export const AuthContext = createContext();
 
@@ -75,11 +77,42 @@ export const AuthProvider = ({children}) => {
     }
 
     const logout = async () => {
+        const currentUser = user?.id ? user : JSON.parse(localStorage.getItem("usuario") || "null");
+
+        // 1) Si hay turno activo, si bloqueamos salida.
+        try {
+            if (currentUser?.id) {
+                const resTurnos = await axios.get('/turnos/activos');
+                const tieneTurnoActivo = Array.isArray(resTurnos.data)
+                    && resTurnos.data.some((t) => Number(t.usuario_id) === Number(currentUser.id));
+
+                if (tieneTurnoActivo) {
+                    await Swal.fire({
+                        icon: 'warning',
+                        title: 'No puedes cerrar sesión',
+                        text: 'Debes finalizar tu turno y reportar el corte de caja antes de salir.',
+                        confirmButtonColor: '#c026d3'
+                    });
+                    return false;
+                }
+            }
+        } catch (error) {
+            console.warn('No se pudo validar turno activo antes de salir:', error);
+        }
+
+        // 2) Intento de logout en servidor (si falla, cerramos local igualmente).
+        try {
+            await logoutRequest();
+        } catch (error) {
+            console.warn('Logout API fallo; cerrando sesion local de todas formas.', error?.response?.status || error?.message);
+        }
+
         Cookies.remove('token');
         setIsAuthenticated(false);
         localStorage.clear();
         sessionStorage.clear();
         setUser(null);
+        return true;
     }
 
     const getUsuarios = async () => {
@@ -102,10 +135,12 @@ export const AuthProvider = ({children}) => {
 
     const eliminarUsuario = async (id) => {
         try {
-            const res = await DeleteRequest(id);
-            if (res.status === 204) setUsers(negocios.filter((negocio) => negocio._id !== id))
+            await DeleteRequest(id);
+            setUsers(prev => prev.filter((u) => u.id !== id));
+            await getValorid();
         } catch (error) {
-            console.log(error);
+            const msg = error.response?.data?.message || 'Error al eliminar usuario';
+            throw new Error(msg);
         }
     }
 

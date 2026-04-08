@@ -12,11 +12,15 @@ import PedidosRoutes from "./routes/pedidos.routes.js";
 import GastosRoutes from "./routes/gastos.routes.js";
 import VentasRoutes from "./routes/ventas.routes.js";
 import ToppingsRoutes from "./routes/toppings.routes.js";
+import ToppingsCategoriasRoutes from "./routes/toppingsCategorias.routes.js";
 import TurnosRoutes from "./routes/turnos.routes.js";
 import PedidosDigitalesRoutes from "./routes/pedidos_digitales.routes.js";
 import MetricsRoutes from "./routes/metrics.routes.js";
 import ConfigAppRoutes from "./routes/configuracion.routes.js";
 import InsumosRoutes from "./routes/insumos.routes.js";
+import PromocionesRoutes from "./routes/promociones.routes.js";
+import SyncRoutes from "./routes/sync.routes.js";
+import CajaRoutes from "./routes/caja.routes.js";
 
 const app = express();
 
@@ -39,10 +43,14 @@ app.use("/api", PedidosRoutes);
 app.use("/api", GastosRoutes);
 app.use("/api", VentasRoutes);
 app.use("/api", ToppingsRoutes);
+app.use("/api", ToppingsCategoriasRoutes);
 app.use("/api", TurnosRoutes);
 app.use("/api", PedidosDigitalesRoutes);
 app.use("/api", MetricsRoutes);
 app.use("/api", ConfigAppRoutes);
 app.use("/api", InsumosRoutes);
+app.use("/api", PromocionesRoutes);
+app.use("/api", SyncRoutes);
+app.use("/api", CajaRoutes);
 
 export default app;

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { ImCancelCircle } from "react-icons/im";
-import { FaCheckCircle, FaMobileAlt, FaWhatsapp } from "react-icons/fa";
+import { FaCheckCircle, FaMobileAlt, FaPrint, FaWhatsapp } from "react-icons/fa";
 import Swal from "sweetalert2";
 import axios from "../../api/axios";
 import { useRef } from "react";
@@ -25,6 +25,7 @@ const Pedidos = () => {
   const [ticketConfig, setTicketConfig] = useState(null);
   const [negocioInfo, setNegocioInfo] = useState(null);
   const [ticketPedido, setTicketPedido] = useState(null);
+  const [ticketMode, setTicketMode] = useState("cliente");
   const [pendingPrint, setPendingPrint] = useState(false);
   const negocioSeleccionado = JSON.parse(localStorage.getItem("negocioSeleccionado"));
   const usuario = JSON.parse(localStorage.getItem("usuario"));
@@ -75,6 +76,20 @@ const Pedidos = () => {
     return normalized === 'en preparacion';
   };
 
+  const formatMetodoPago = (metodoPago) => {
+    const normalized = (metodoPago || "")
+      .toString()
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, "_");
+
+    if (normalized === "transferencia") return "Transferencia";
+    if (normalized === "contra_entrega" || normalized === "efectivo") return "Contra entrega";
+    return "Contra entrega";
+  };
+
   const buildDigitalTicketText = (pedido) => {
     const lineas = buildTicketLines(pedido)
       .map((item) => `• ${item.cantidad}x ${item.producto} - $${Number(item.total).toFixed(2)}`)
@@ -87,6 +102,27 @@ const Pedidos = () => {
       `\nTOTAL: $${Number(pedido?.total || 0).toFixed(2)}`,
       `Estado: Confirmado`
     ].join("\n");
+  };
+
+  const buildKitchenMetaLines = (pedido) => {
+    if (!pedido) return [];
+    const entrega = pedido?.tipo_entrega === "Envio" ? "Envío a domicilio" : "Recoge en sucursal";
+    const hora = pedido?.created_at
+      ? new Date(pedido.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })
+      : "-";
+
+    const lines = [
+      `Pedido: #${pedido.id}`,
+      `Cliente: ${pedido.cliente_nombre || "Cliente"}`,
+      `Hora: ${hora}`,
+      `Entrega: ${entrega}`,
+      `Pago: ${formatMetodoPago(pedido.metodo_pago)}`
+    ];
+
+    if (pedido.contacto_cliente) lines.push(`Contacto: ${pedido.contacto_cliente}`);
+    if (pedido.notas_cliente) lines.push(`Notas: ${pedido.notas_cliente}`);
+
+    return lines;
   };
 
   const handleSendDigitalTicket = async (pedido) => {
@@ -129,6 +165,7 @@ const Pedidos = () => {
     });
 
     if (resultado.isConfirmed) {
+      setTicketMode("cliente");
       setTicketPedido(pedido);
       setPendingPrint(true);
       return;
@@ -218,6 +255,18 @@ const Pedidos = () => {
       fetchPedidosDigitales();
       fetchHistorialPedidosDigitales();
     } catch (e) { console.error(e); }
+  };
+
+  const imprimirComandaCocina = (pedido) => {
+    setTicketMode("cocina");
+    setTicketPedido(pedido);
+    setPendingPrint(true);
+  };
+
+  const handleReimprimirTicket = (pedido) => {
+    setTicketMode("cliente");
+    setTicketPedido(pedido);
+    setPendingPrint(true);
   };
 
   const registrarPedidoRedes = async () => {
@@ -422,6 +471,8 @@ const Pedidos = () => {
             const entrega = parseEntregaDetalle(p.entrega_detalle);
             const esEnvio = p.tipo_entrega === "Envio";
             const estaEnPreparacion = isPreparacionStatus(p.status);
+            const metodoPagoLabel = formatMetodoPago(p.metodo_pago);
+            const esTransferencia = metodoPagoLabel === "Transferencia";
             const tieneUbicacion = p.entrega_lat && p.entrega_lng;
             const mapsUrl = tieneUbicacion
               ? `https://www.google.com/maps?q=${p.entrega_lat},${p.entrega_lng}`
@@ -446,6 +497,10 @@ const Pedidos = () => {
                 <div className="mt-3 text-xs text-gray-600 space-y-1">
                   <p className="font-bold text-gray-700">
                     Tipo: {esEnvio ? 'Envío a domicilio' : 'Recoge en sucursal'}
+                  </p>
+                  <p className="font-bold text-gray-700">
+                    Pago:{" "}
+                    <span className={esTransferencia ? "text-blue-700" : "text-emerald-700"}>{metodoPagoLabel}</span>
                   </p>
                   {esEnvio && (
                     <>
@@ -472,6 +527,22 @@ const Pedidos = () => {
                 </div>
               </div>
               <div className="flex gap-3">
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => handleReimprimirTicket(p)}
+                    className="bg-rose-500 hover:bg-rose-600 text-white px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-[10px] uppercase tracking-wider shadow-sm"
+                    title="Imprimir ticket para cliente"
+                  >
+                    <FaPrint /> Ticket
+                  </button>
+                  <button
+                    onClick={() => imprimirComandaCocina(p)}
+                    className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-[10px] uppercase tracking-wider shadow-sm"
+                    title="Imprimir comanda para cocina"
+                  >
+                    <FaPrint /> Comanda
+                  </button>
+                </div>
                 {!estaEnPreparacion ? (
                   <button onClick={() => marcarPedidoEnPreparacion(p.id)} className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap">
                     <FaCheckCircle /> En preparación
@@ -493,6 +564,8 @@ const Pedidos = () => {
           ) : pedidosDigitalesHistorial.map((p) => {
             const entrega = parseEntregaDetalle(p.entrega_detalle);
             const esEnvio = p.tipo_entrega === "Envio";
+            const metodoPagoLabel = formatMetodoPago(p.metodo_pago);
+            const esTransferencia = metodoPagoLabel === "Transferencia";
             const fueConfirmado = (p.status || '').toLowerCase() === 'confirmado';
             const tieneUbicacion = p.entrega_lat && p.entrega_lng;
             const mapsUrl = tieneUbicacion
@@ -516,6 +589,10 @@ const Pedidos = () => {
 
                   <div className="mt-3 text-xs text-gray-600 space-y-1">
                     <p className="font-bold text-gray-700">Tipo: {esEnvio ? 'Envío a domicilio' : 'Recoge en sucursal'}</p>
+                    <p className="font-bold text-gray-700">
+                      Pago:{" "}
+                      <span className={esTransferencia ? "text-blue-700" : "text-emerald-700"}>{metodoPagoLabel}</span>
+                    </p>
                     {esEnvio && (
                       <>
                         {entrega?.direccion && <p><span className="font-bold">Dirección:</span> {entrega.direccion}</p>}
@@ -540,6 +617,15 @@ const Pedidos = () => {
                     )}
                   </div>
                 </div>
+                <div className="flex flex-col gap-2">
+                   <button
+                    onClick={() => handleReimprimirTicket(p)}
+                    className="bg-gray-100 hover:bg-rose-500 hover:text-white text-gray-600 px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-[10px] uppercase tracking-wider"
+                    title="Re-imprimir ticket"
+                   >
+                    <FaPrint /> Ticket
+                   </button>
+                </div>
               </div>
             );
           })}
@@ -549,11 +635,14 @@ const Pedidos = () => {
       <div className="hidden">
         <TicketPrint
           ref={componentRef}
-          venta={{ metodo_pago: 'Online' }}
+          venta={{ metodo_pago: formatMetodoPago(ticketPedido?.metodo_pago) }}
           seleccionados={buildTicketLines(ticketPedido)}
           total={Number(ticketPedido?.total || 0).toFixed(2)}
           negocio={negocioInfo || negocioSeleccionado || {}}
           config={ticketConfig || {}}
+          ticketTitle={ticketMode === "cocina" ? "COMANDA COCINA" : "TICKET PEDIDO ONLINE"}
+          ticketMetaLines={buildKitchenMetaLines(ticketPedido)}
+          showPrices={ticketMode !== "cocina"}
         />
       </div>
     </div>

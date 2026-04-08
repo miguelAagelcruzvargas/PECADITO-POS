@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { 
   FaCheck, FaTrash, FaTelegramPlane, FaStore, FaFileInvoice, 
   FaMapMarkerAlt, FaQuoteLeft, FaImage, FaSave, FaTicketAlt, 
-  FaTextHeight, FaRulerHorizontal, FaEye 
+  FaTextHeight, FaRulerHorizontal, FaEye, FaUniversity 
 } from "react-icons/fa";
 import Swal from "sweetalert2";
 import axios from "../../api/axios";
@@ -49,6 +49,15 @@ const ConfiguracionPOS = () => {
     ticket_decoration: 'none'
   });
 
+  const [bancoForm, setBancoForm] = useState({
+    banco_nombre: "",
+    banco_titular: "",
+    banco_cuenta: "",
+    banco_clabe: "",
+    banco_concepto: ""
+  });
+  const [savingBanco, setSavingBanco] = useState(false);
+
   const { getValorid, users, confirm, user, verificacion, eliminarUsuario, actualizarUsuario } = useAuth();
   const { actualizarNegocio } = useNegocios();
   const navigate = useNavigate();
@@ -62,8 +71,24 @@ const ConfiguracionPOS = () => {
     fetchAlertLogStats();
     if (negocioSeleccionado?.id) {
       fetchBusinessInfo();
+      fetchBancoInfo();
     }
   }, []);
+
+  const fetchBancoInfo = async () => {
+    try {
+      const res = await axios.get(`/configuraciones/${negocioSeleccionado.id}/transferencia`);
+      setBancoForm({
+        banco_nombre: res.data.banco_nombre || "",
+        banco_titular: res.data.banco_titular || "",
+        banco_cuenta: res.data.banco_cuenta || "",
+        banco_clabe: res.data.banco_clabe || "",
+        banco_concepto: res.data.banco_concepto || ""
+      });
+    } catch (e) {
+      console.warn("No se cargaron datos bancarios");
+    }
+  };
 
   const fetchBusinessInfo = async () => {
     try {
@@ -175,12 +200,13 @@ const ConfiguracionPOS = () => {
         telegram_chat_id: telegramConfig.chatId,
         telegram_alert_auto_cleanup: alertCleanupConfig.autoCleanup ? 1 : 0,
         telegram_alert_retention_days: Math.max(1, Number(alertCleanupConfig.retentionDays || 30)),
-        ...ticketConfig
+        ...ticketConfig,
+        ...bancoForm
       });
       
       Swal.fire({
         title: "Pasos Guardados",
-        text: "La configuración de Telegram y Ticket se ha guardado.",
+        text: "La configuración se ha actualizado correctamente.",
         icon: "success",
         confirmButtonColor: "#3b82f6"
       });
@@ -331,6 +357,7 @@ const ConfiguracionPOS = () => {
         {[
           { id: "marca", label: "Marca" },
           { id: "ticket", label: "Ticket" },
+          { id: "pagos", label: "Pagos" },
           { id: "integraciones", label: "Integraciones" },
           { id: "equipo", label: "Equipo" },
         ].map((tab) => (
@@ -569,6 +596,57 @@ const ConfiguracionPOS = () => {
           </div>
         </div>
       </div>
+      )}
+
+      {activeTab === "pagos" && (
+        <div className="grid lg:grid-cols-1 gap-6">
+          <div className="bg-white border border-pink-50 rounded-[32px] p-6 shadow-xl shadow-pink-100/10 space-y-6 max-w-2xl">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-14 h-14 bg-indigo-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-indigo-200">
+                <FaUniversity size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-gray-900 tracking-tight uppercase">Datos de Transferencia</h3>
+                <p className="text-xs text-gray-400 font-bold italic tracking-tighter">Estos datos se mostrarán en el Menú Digital al cliente.</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {[
+                { key: "banco_nombre", label: "Nombre del Banco", placeholder: "Ej: BBVA, Banorte, HSBC…" },
+                { key: "banco_titular", label: "Nombre del Titular", placeholder: "Ej: Juan Pérez López" },
+                { key: "banco_cuenta", label: "Número de Cuenta", placeholder: "Ej: 1234567890" },
+                { key: "banco_clabe", label: "CLABE Interbancaria", placeholder: "18 dígitos" },
+                { key: "banco_concepto", label: "Concepto de Pago sugerido", placeholder: "Ej: Pedido Pecadito..." }
+              ].map(({ key, label, placeholder }) => (
+                <div key={key} className="space-y-1">
+                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{label}</label>
+                  <input
+                    type="text"
+                    placeholder={placeholder}
+                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl px-5 py-3 outline-none focus:border-indigo-300 transition-all font-bold text-gray-700"
+                    value={bancoForm[key]}
+                    onChange={(e) => setBancoForm({ ...bancoForm, [key]: e.target.value })}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100/50 flex items-start gap-4">
+              <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 flex-shrink-0 font-black">?</div>
+              <p className="text-[11px] text-blue-800 font-medium leading-relaxed italic">
+                Asegúrate de que los datos sean correctos. El cliente podrá copiarlos directamente desde su celular para realizar el pago de su orden digital.
+              </p>
+            </div>
+            
+            <button
+              onClick={handleSaveEverything}
+              className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+            >
+              <FaSave /> Guardar Configuración de Pagos
+            </button>
+          </div>
+        </div>
       )}
 
       {activeTab === "integraciones" && (

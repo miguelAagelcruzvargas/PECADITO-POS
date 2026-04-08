@@ -33,10 +33,11 @@ export const TurnoProvider = ({ children }) => {
     }
   };
 
-  const cerrarTurno = async () => {
+  const cerrarTurno = async (montoFinalDeclarado) => {
     try {
-      await axios.post('/turnos/cerrar', { id: turnoActual.id });
+      const res = await axios.post('/turnos/cerrar', { id: turnoActual.id, monto_final_declarado: montoFinalDeclarado ?? null });
       setTurnoActual(null);
+      return res.data;
     } catch (e) {
       throw e;
     }

@@ -29,13 +29,20 @@ export const getValoresById = (id, callback) => {
         'venta_local' AS tipo_registro,
         v.total,
         COALESCE(c.nombre, 'Cliente mostrador') COLLATE utf8mb4_unicode_ci AS nombre_cliente,
-        v.metodo_pago,
+        CASE
+          WHEN LOWER(COALESCE(v.metodo_pago, '')) LIKE '%transfer%' THEN 'Transferencia'
+          WHEN LOWER(COALESCE(v.metodo_pago, '')) LIKE '%contra%' THEN 'Contra entrega'
+          ELSE 'Efectivo'
+        END COLLATE utf8mb4_unicode_ci AS metodo_pago,
         v.created_at,
         v.id_negocio,
         COALESCE(v.canal_venta, 'Local') COLLATE utf8mb4_unicode_ci AS canal_venta,
-        COALESCE(v.usuario_nombre, 'Admin') COLLATE utf8mb4_unicode_ci AS nombre_usuario
+        COALESCE(u1.nombre, v.usuario_nombre, 'Admin') COLLATE utf8mb4_unicode_ci AS nombre_usuario,
+        COALESCE(u1.role, 'Administrador') COLLATE utf8mb4_unicode_ci AS role_usuario,
+        'Venta fisica en caja' COLLATE utf8mb4_unicode_ci AS empleado_accion
       FROM ventas v
       LEFT JOIN clientes c ON v.id_cliente = c.id
+      LEFT JOIN usuarios u1 ON v.usuario_id = u1.id
       WHERE v.id_negocio = ?
     )
     UNION ALL
@@ -46,14 +53,21 @@ export const getValoresById = (id, callback) => {
         'pedido_online' AS tipo_registro,
         pd.total,
         pd.cliente_nombre COLLATE utf8mb4_unicode_ci AS nombre_cliente,
-        'En linea' COLLATE utf8mb4_unicode_ci AS metodo_pago,
+        CASE
+          WHEN LOWER(COALESCE(pd.metodo_pago, '')) LIKE '%transfer%' THEN 'Transferencia'
+          WHEN LOWER(COALESCE(pd.metodo_pago, '')) LIKE '%contra%' THEN 'Contra entrega'
+          WHEN COALESCE(pd.metodo_pago, '') = '' THEN 'Contra entrega'
+          ELSE 'Efectivo'
+        END COLLATE utf8mb4_unicode_ci AS metodo_pago,
         COALESCE(pd.confirmado_en, pd.created_at) AS created_at,
         pd.negocio_id AS id_negocio,
         'Online' COLLATE utf8mb4_unicode_ci AS canal_venta,
+        COALESCE(u2.nombre, 'Sin confirmar') COLLATE utf8mb4_unicode_ci AS nombre_usuario,
+        COALESCE(u2.role, 'N/A') COLLATE utf8mb4_unicode_ci AS role_usuario,
         CASE
-          WHEN LOWER(COALESCE(u2.role, '')) LIKE '%admin%' THEN 'Admin'
-          ELSE COALESCE(u2.nombre, 'Admin')
-        END COLLATE utf8mb4_unicode_ci AS nombre_usuario
+          WHEN u2.id IS NULL THEN 'Pedido online pendiente de confirmar empleado'
+          ELSE 'Pedido online confirmado por empleado'
+        END COLLATE utf8mb4_unicode_ci AS empleado_accion
       FROM pedidos_digitales pd
       LEFT JOIN usuarios u2 ON pd.confirmado_por = u2.id
       WHERE pd.negocio_id = ?

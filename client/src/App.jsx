@@ -16,6 +16,8 @@ import Reportes from "./pages/admin/Reportes";
 import PuntosDeVenta from "./pages/admin/PuntosDeVenta";
 import Toppings from "./pages/admin/Toppings.jsx";
 import ConfigMenu from "./pages/admin/ConfigMenu.jsx";
+import Empleados from "./pages/admin/Empleados.jsx";
+import GestionCaja from "./pages/admin/GestionCaja.jsx";
 import ProtectedRoute from "./ProtecteRoute";
 import AdminLayout from "./components/admin/AdminLayout";
 import MenuDigital from "./pages/MenuDigital";
@@ -71,6 +73,8 @@ function App() {
                                 <Route path="/config-menu" element={<ConfigMenu />} />
                                 <Route path="/reportes" element={<Reportes />} />
                                 <Route path="/puntos-de-venta" element={<PuntosDeVenta />} />
+                                <Route path="/empleados" element={<Empleados />} />
+                                <Route path="/gestion-caja" element={<GestionCaja />} />
                               </Route>
                             </Route>
                             <Route path="*" element={<Login />} />

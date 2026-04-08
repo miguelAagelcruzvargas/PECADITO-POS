@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { crear, obtener, obtenerUno, actualizar, actualizarPerfil, eliminar, login, logout, verifyToken, confirmarContraseña, obtenerValoresid } from "../controllers/usuarios.controller.js";
+import { crear, obtener, obtenerUno, actualizar, actualizarPerfil, eliminar, login, logout, verifyToken, confirmarContraseña, obtenerValoresid, crearEmpleado } from "../controllers/usuarios.controller.js";
 import { authREquired } from "../middlewares/validateToken.js";
 
 const router = Router();
@@ -24,6 +24,7 @@ router.patch("/usuario/:id/perfil", actualizarPerfil);
 
 router.delete("/usuario/:id", eliminar);
 
+router.post("/empleados/generar", crearEmpleado);
 router.post("/password", confirmarContraseña);
 
 

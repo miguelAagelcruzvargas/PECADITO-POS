@@ -1,5 +1,14 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { CrearProducto, ObtenerValoresPorId, EliminarProductoRequest, AlertasRequest, ActualizarProducto } from "../api/inventario.js";
+import { 
+    CrearProducto, 
+    ObtenerValoresPorId, 
+    EliminarProductoRequest, 
+    AlertasRequest, 
+    ActualizarProducto,
+    ObtenerPromocionesRequest,
+    CrearPromocionRequest,
+    EliminarPromocionRequest
+} from "../api/inventario.js";
 
 const inventarioContext = createContext();
 
@@ -17,6 +26,7 @@ export function InventarioProvider({ children }) {
 
     const [inventario, setInventario] = useState([]);
     const [alertas, setAlertas] = useState([]);
+    const [promociones, setPromociones] = useState([]);
 
     const getValorid = async (negocioIdParam) => {
         try {
@@ -29,9 +39,9 @@ export function InventarioProvider({ children }) {
                 }
                 const res = await ObtenerValoresPorId(negocioId);
                 if (!Array.isArray(res.data)) {
-                    setInventario([res.data]); // Lo metes en un array
+                    setInventario([res.data]); 
                 } else {
-                    setInventario(res.data); // Ya es una lista
+                    setInventario(res.data);
                 }
             } catch (error) {
                 if(error.status === 404){
@@ -46,15 +56,47 @@ export function InventarioProvider({ children }) {
                 const usuario = JSON.parse(localStorage.getItem("usuario"));
                 const res = await AlertasRequest(!id ? usuario.negocios_id : id);
                 if (!Array.isArray(res.data)) {
-                    setAlertas([res.data]); // Lo metes en un array
+                    setAlertas([res.data]); 
                 } else {
-                    setAlertas(res.data); // Ya es una lista
+                    setAlertas(res.data); 
                 }
             } catch (error) {
                 if(error.status === 404){
                     setAlertas([]);
                 }
             }
+    }
+
+    const getPromociones = async (negocioIdParam) => {
+        try {
+            const id = JSON.parse(localStorage.getItem("negocioSeleccionado"))?.id;
+            const usuario = JSON.parse(localStorage.getItem("usuario"));
+            const negocioId = negocioIdParam || id || usuario?.negocios_id;
+            if (!negocioId) return;
+            const res = await ObtenerPromocionesRequest(negocioId);
+            setPromociones(res.data || []);
+        } catch (error) {
+            console.log(error);
+            setPromociones([]);
+        }
+    }
+
+    const crearPromocion = async (data) => {
+        try {
+            await CrearPromocionRequest(data);
+            getPromociones();
+        } catch (error) {
+            console.log(error);
+        }
+    }
+
+    const eliminarPromocion = async (id) => {
+        try {
+            await EliminarPromocionRequest(id);
+            getPromociones();
+        } catch (error) {
+            console.log(error);
+        }
     }
 
     const Crear = async (negocio) => {
@@ -88,11 +130,15 @@ export function InventarioProvider({ children }) {
         <inventarioContext.Provider value={{
             inventario,
             alertas,
+            promociones,
             Crear,
             getValorid,
             eliminarProducto,
             Actualizar,
-            getAlertasId
+            getAlertasId,
+            getPromociones,
+            crearPromocion,
+            eliminarPromocion
         }}>
             {children}
         </inventarioContext.Provider>

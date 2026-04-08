@@ -1,4 +1,4 @@
-import db from '../db.js';
+import db, { triggerSyncUpdate } from '../db.js';
 import TelegramService from '../services/TelegramService.js';
 
 const queryAsync = (sql, params = []) =>
@@ -34,7 +34,15 @@ const ensureConfiguracionesSchema = async () => {
     { name: 'ticket_show_slogan', ddl: 'ALTER TABLE configuraciones ADD COLUMN ticket_show_slogan TINYINT(1) DEFAULT 1' },
     { name: 'ticket_font_size', ddl: 'ALTER TABLE configuraciones ADD COLUMN ticket_font_size INT DEFAULT 12' },
     { name: 'ticket_paper_size', ddl: "ALTER TABLE configuraciones ADD COLUMN ticket_paper_size VARCHAR(10) DEFAULT '80mm'" },
-    { name: 'ticket_decoration', ddl: "ALTER TABLE configuraciones ADD COLUMN ticket_decoration VARCHAR(20) DEFAULT 'none'" }
+    { name: 'ticket_decoration', ddl: "ALTER TABLE configuraciones ADD COLUMN ticket_decoration VARCHAR(20) DEFAULT 'none'" },
+    { name: 'banco_nombre', ddl: 'ALTER TABLE configuraciones ADD COLUMN banco_nombre VARCHAR(100) NULL' },
+    { name: 'banco_titular', ddl: 'ALTER TABLE configuraciones ADD COLUMN banco_titular VARCHAR(150) NULL' },
+    { name: 'banco_cuenta', ddl: 'ALTER TABLE configuraciones ADD COLUMN banco_cuenta VARCHAR(50) NULL' },
+    { name: 'banco_clabe', ddl: 'ALTER TABLE configuraciones ADD COLUMN banco_clabe VARCHAR(18) NULL' },
+    { name: 'banco_concepto', ddl: 'ALTER TABLE configuraciones ADD COLUMN banco_concepto VARCHAR(100) NULL' },
+    { name: 'menu_activo', ddl: 'ALTER TABLE configuraciones ADD COLUMN menu_activo TINYINT(1) DEFAULT 1' },
+    { name: 'horarios', ddl: 'ALTER TABLE configuraciones ADD COLUMN horarios TEXT NULL' },
+    { name: 'mensaje_especial', ddl: 'ALTER TABLE configuraciones ADD COLUMN mensaje_especial TEXT NULL' }
   ];
 
   const refreshedColumns = await queryAsync('SHOW COLUMNS FROM configuraciones');
@@ -60,7 +68,22 @@ const buildDefaultConfig = (id_negocio) => ({
   ticket_show_slogan: 1,
   ticket_font_size: 12,
   ticket_paper_size: '80mm',
-  ticket_decoration: 'none'
+  ticket_decoration: 'none',
+  banco_nombre: '',
+  banco_titular: '',
+  banco_cuenta: '',
+  banco_clabe: '',
+  banco_concepto: '',
+  menu_activo: 1,
+  horarios: JSON.stringify({
+    Lunes: { abierto: true, apertura: "09:00", cierre: "21:00" },
+    Martes: { abierto: true, apertura: "09:00", cierre: "21:00" },
+    Miercoles: { abierto: true, apertura: "09:00", cierre: "21:00" },
+    Jueves: { abierto: true, apertura: "09:00", cierre: "21:00" },
+    Viernes: { abierto: true, apertura: "09:00", cierre: "21:00" },
+    Sabado: { abierto: true, apertura: "09:00", cierre: "21:00" },
+    Domingo: { abierto: false, apertura: "09:00", cierre: "21:00" }
+  })
 });
 
 export const getConfig = (req, res) => {
@@ -98,7 +121,15 @@ export const updateConfig = (req, res) => {
     ticket_show_slogan,
     ticket_font_size,
     ticket_paper_size,
-    ticket_decoration
+    ticket_decoration,
+    banco_nombre,
+    banco_titular,
+    banco_cuenta,
+    banco_clabe,
+    banco_concepto,
+    menu_activo,
+    horarios,
+    mensaje_especial
   } = req.body;
 
   (async () => {
@@ -122,7 +153,15 @@ export const updateConfig = (req, res) => {
         ticket_show_slogan = ?,
         ticket_font_size = ?,
         ticket_paper_size = ?,
-        ticket_decoration = ?
+        ticket_decoration = ?,
+        banco_nombre = ?,
+        banco_titular = ?,
+        banco_cuenta = ?,
+        banco_clabe = ?,
+        banco_concepto = ?,
+        menu_activo = ?,
+        horarios = ?,
+        mensaje_especial = ?
         WHERE negocio_id = ?`;
 
       const values = [
@@ -138,10 +177,19 @@ export const updateConfig = (req, res) => {
         ticket_font_size ?? 12,
         ticket_paper_size ?? '80mm',
         ticket_decoration ?? 'none',
+        banco_nombre ?? '',
+        banco_titular ?? '',
+        banco_cuenta ?? '',
+        banco_clabe ?? '',
+        banco_concepto ?? '',
+        menu_activo ?? 1,
+        horarios ? (typeof horarios === 'string' ? horarios : JSON.stringify(horarios)) : null,
+        mensaje_especial ?? '',
         id_negocio
       ];
 
       await queryAsync(sql, values);
+      triggerSyncUpdate(id_negocio);
       return res.json({ message: 'Configuración actualizada' });
     } catch (err) {
       return res.status(500).json(err);
@@ -271,6 +319,24 @@ export const clearAlertLog = (req, res) => {
       });
     } catch (err) {
       return res.status(500).json({ message: err.message || 'No se pudo limpiar el historial de alertas.' });
+    }
+  })();
+};
+
+// Endpoint público: datos de transferencia bancaria para el menú digital
+export const getTransferData = (req, res) => {
+  const { id_negocio } = req.params;
+  (async () => {
+    try {
+      await ensureConfiguracionesSchema();
+      const results = await queryAsync(
+        'SELECT banco_nombre, banco_titular, banco_cuenta, banco_clabe, banco_concepto FROM configuraciones WHERE negocio_id = ? LIMIT 1',
+        [id_negocio]
+      );
+      if (!results.length) return res.json({ banco_nombre: '', banco_titular: '', banco_cuenta: '', banco_clabe: '', banco_concepto: '' });
+      return res.json(results[0]);
+    } catch (err) {
+      return res.status(500).json({ message: err.message });
     }
   })();
 };

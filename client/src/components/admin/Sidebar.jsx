@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/UsuariosContext";
 import {
   FaTachometerAlt, FaUsers, FaUserFriends, FaTruck, FaShoppingCart,
-  FaMoneyBill, FaChartBar, FaCog, FaBoxOpen, FaBars, FaHeart
+  FaMoneyBill, FaChartBar, FaCog, FaBoxOpen, FaBars, FaHeart, FaUserTie, FaWallet
 } from 'react-icons/fa';
 import { CgLogOut } from "react-icons/cg";
 import { hasPermiso, parsePermisos } from "../../constants/permisos";
@@ -48,6 +48,7 @@ const Sidebar = () => {
   const allLinks = [
     { icon: <FaTachometerAlt />, text: 'Dashboard', link: '/dashboard', perm: 'dashboard' },
     { icon: <FaUsers />, text: 'Personal', link: '/usuarios', perm: 'usuarios' },
+    { icon: <FaUserTie />, text: 'Horarios', link: '/empleados', perm: 'usuarios' },
     { icon: <FaTruck />, text: 'Proveedores', link: '/proveedores', perm: 'proveedores' },
     { icon: <FaShoppingCart />, text: 'Ventas', link: '/ventas', perm: 'ventas' },
     { icon: <FaChartBar />, text: 'Historial Ventas', link: '/historial-ventas', perm: 'ventas' },
@@ -55,13 +56,17 @@ const Sidebar = () => {
     { icon: <FaHeart />, text: 'Toppings', link: '/toppings', perm: 'inventario' },
     { icon: <FaShoppingCart />, text: 'Pedidos', link: '/pedidos', perm: 'pedidos' },
     { icon: <FaMoneyBill />, text: 'Gastos', link: '/gastos', perm: 'gastos' },
+    { icon: <FaWallet />, text: 'Gestión de Caja', link: '/gestion-caja', perm: 'ventas' },
     { icon: <FaChartBar />, text: 'Reportes', link: '/reportes', perm: 'reportes' },
     { icon: <FaCog />, text: 'Menú Digital', link: '/config-menu', perm: 'configuraciones' },
     { icon: <FaCog />, text: 'Configuraciones', link: '/configuraciones', perm: 'configuraciones' },
   ];
 
   let filteredLinks = allLinks;
-  if (user?.negocios_id) {
+  if (user?.role === 'Administrador') {
+    // Administradores ven todo
+    filteredLinks = allLinks;
+  } else if (user?.negocios_id) {
     const userPerms = parsePermisos(user?.permisos);
     filteredLinks = allLinks.filter((l) => hasPermiso(userPerms, l.perm));
 
@@ -70,7 +75,7 @@ const Sidebar = () => {
     }
   }
   
-  const logoutLink = { icon: <CgLogOut />, text: 'Cerrar sesión', link: '/', onclick: () => {logout()} };
+  const logoutLink = { icon: <CgLogOut />, text: 'Cerrar sesión', link: '/' };
 
   const negocioSeleccionado = JSON.parse(localStorage.getItem("negocioSeleccionado"));
 
@@ -93,9 +98,9 @@ const Sidebar = () => {
       <div
         ref={sidebarRef}
         className={`bg-white border-r border-pink-50 w-64 p-6 flex flex-col items-stretch
-        fixed top-0 left-0 h-[100dvh] z-50 transition-all duration-300 shadow-xl shadow-pink-100/20
+        fixed top-0 left-0 h-[100dvh] md:h-screen z-50 transition-all duration-300 shadow-xl shadow-pink-100/20
         ${open ? 'translate-x-0' : '-translate-x-full'} 
-        xl:translate-x-0 xl:sticky xl:top-0 xl:block overflow-hidden`}
+        xl:translate-x-0 xl:sticky xl:top-0 xl:flex xl:flex-col overflow-hidden`}
       >
         <div className="mb-8 flex items-center gap-3 px-2">
             <div className="w-10 h-10 bg-pink-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-pink-200 flex-shrink-0">
@@ -134,9 +139,12 @@ const Sidebar = () => {
         <div className="pt-4 mt-auto border-t border-pink-50 space-y-4 bg-white">
             <Link
               to={logoutLink.link}
-              onClick={() => {
-                logoutLink.onclick();
+              onClick={async (e) => {
+                e.preventDefault();
+                const ok = await logout();
+                if (!ok) return;
                 setOpen(false);
+                window.location.href = '/';
               }}
               className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all group bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white border border-rose-100"
             >

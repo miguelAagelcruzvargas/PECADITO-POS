@@ -1,16 +1,20 @@
 import { FaArrowLeft, FaUserCircle, FaPowerOff } from "react-icons/fa";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/UsuariosContext";
 import StockAlert from "./StockAlert";
 import PedidosOnlineAlert from "./PedidosOnlineAlert";
+import TurnoAlert from "./TurnoAlert";
 import Swal from "sweetalert2";
 
 export default function Topbar() {
   const { logout, user, actualizarMiPerfil } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isVentas = location.pathname === "/ventas";
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    const ok = await logout();
+    if (!ok) return;
     navigate("/");
   };
 
@@ -63,7 +67,8 @@ export default function Topbar() {
       <div className="flex items-center gap-2 sm:gap-3 md:gap-5 min-w-0">
         <div className="flex items-center gap-2 sm:gap-3 md:gap-5 pr-2 sm:pr-3 md:pr-5 border-r border-pink-100">
             <PedidosOnlineAlert />
-            <StockAlert />
+            <TurnoAlert />
+            {!isVentas && <StockAlert />}
         </div>
         
         <div className="flex items-center gap-2 sm:gap-3 md:gap-4">

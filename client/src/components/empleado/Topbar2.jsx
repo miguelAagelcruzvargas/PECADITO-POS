@@ -8,8 +8,9 @@ export default function Topbar() {
   const { logout, user, actualizarMiPerfil } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    const ok = await logout();
+    if (!ok) return;
     navigate("/");
   };
 

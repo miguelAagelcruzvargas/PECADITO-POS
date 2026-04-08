@@ -83,7 +83,8 @@ function HistorialVentas() {
       </div>
 
       <div className="table-scroll">
-        <table className="min-w-full border border-green-200 text-left">
+        <div className="overflow-x-auto">
+        <table className="min-w-[980px] w-full border border-green-200 text-left">
           <thead className="bg-green-100 text-green-900">
             <tr>
               <th className="px-4 py-3 border-b">Cliente</th>
@@ -99,7 +100,10 @@ function HistorialVentas() {
             {ventasFiltradas.map((v) => (
               <tr key={v.uid || `${v.tipo_registro || "venta"}-${v.id}`} className="border-t">
                 <td className="px-4 py-3">{v.nombre_cliente}</td>
-                <td className="px-4 py-3 text-sm font-semibold text-green-700">{v.nombre_usuario}</td>
+                <td className="px-4 py-3">
+                  <p className="text-sm font-semibold text-green-700 leading-tight">{v.nombre_usuario}</p>
+                  <p className="text-[11px] text-gray-500 leading-tight mt-1">{v.empleado_accion || (v.canal_venta === "Online" ? "Confirmo pedido online" : "Registro venta en caja")}</p>
+                </td>
                 <td className="px-4 py-3">
                   <span
                     className={`px-2 py-1 rounded-full text-xs font-bold ${
@@ -136,6 +140,7 @@ function HistorialVentas() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

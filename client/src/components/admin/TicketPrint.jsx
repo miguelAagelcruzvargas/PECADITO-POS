@@ -1,7 +1,16 @@
 import React from 'react';
 import { buildAssetUrl } from '../../utils/assets';
 
-const TicketPrint = React.forwardRef(({ venta, seleccionados, total, negocio, config }, ref) => {
+const TicketPrint = React.forwardRef(({
+  venta,
+  seleccionados,
+  total,
+  negocio,
+  config,
+  ticketTitle,
+  ticketMetaLines = [],
+  showPrices = true
+}, ref) => {
   const fecha = new Date().toLocaleString();
   
   // Estilos dinámicos según el tamaño de papel y fuente configurado
@@ -35,6 +44,12 @@ const TicketPrint = React.forwardRef(({ venta, seleccionados, total, negocio, co
     <div ref={ref} style={ticketStyle} className="hidden print:block">
       {/* HEADER / LOGO */}
       <div className="text-center mb-4">
+        {ticketTitle && (
+          <p className="font-bold uppercase border-b border-dashed pb-1 mb-2" style={{ fontSize: `${fontSize + 1}px` }}>
+            {ticketTitle}
+          </p>
+        )}
+
         {config?.ticket_show_logo && logoPath ? (
           <img 
             src={buildAssetUrl(logoPath)}
@@ -70,20 +85,22 @@ const TicketPrint = React.forwardRef(({ venta, seleccionados, total, negocio, co
       <div className="border-b-2 border-double pb-1 mb-2">
         <div className="flex justify-between font-bold">
           <span>DESCRIPCIÓN</span>
-          <span>TOTAL</span>
+          {showPrices && <span>TOTAL</span>}
         </div>
       </div>
 
       <div className="mb-4">
         {seleccionados.map((item, idx) => (
           <div key={idx} className="mb-2">
-            <div className="flex justify-between items-start">
+            <div className={showPrices ? 'flex justify-between items-start' : ''}>
               <span style={{ flex: 1 }}>
                 {item.cantidad}x {item.producto}
               </span>
-              <span className="font-bold whitespace-nowrap ml-2">
-                ${item.total}
-              </span>
+              {showPrices && (
+                <span className="font-bold whitespace-nowrap ml-2">
+                  ${item.total}
+                </span>
+              )}
             </div>
             
             {item.toppings?.length > 0 && (
@@ -97,17 +114,23 @@ const TicketPrint = React.forwardRef(({ venta, seleccionados, total, negocio, co
 
       {/* TOTALES */}
       <div className="border-t border-double pt-2 space-y-1">
-        <div className="flex justify-between font-bold" style={{ fontSize: `${fontSize + 2}px` }}>
-          <span>TOTAL:</span>
-          <span>${total}</span>
-        </div>
-        
-        {venta?.metodo_pago && (
+        {showPrices && (
+          <div className="flex justify-between font-bold" style={{ fontSize: `${fontSize + 2}px` }}>
+            <span>TOTAL:</span>
+            <span>${total}</span>
+          </div>
+        )}
+
+        {venta?.metodo_pago && showPrices && (
           <div className="flex justify-between italic" style={{ fontSize: `${fontSize - 1}px` }}>
             <span>MÉTODO:</span>
             <span>{venta.metodo_pago}</span>
           </div>
         )}
+
+        {ticketMetaLines.map((line, idx) => (
+          <p key={`${line}-${idx}`} style={{ fontSize: `${fontSize - 1}px` }}>{line}</p>
+        ))}
       </div>
 
       {/* FOOTER / ESLOGAN / DECORACIÓN FINAL */}

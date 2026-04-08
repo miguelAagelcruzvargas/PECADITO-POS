@@ -11,6 +11,7 @@ function Dashboard() {
     const [showModal, setShowModal] = useState(false);
     const [metrics, setMetrics] = useState([]);
     const [turnosActivos, setTurnosActivos] = useState([]);
+    const [rendimientoExtra, setRendimientoExtra] = useState([]);
     
     const { negocios, getNegocios, crearNegocio } = useNegocios();
     const { user, logout } = useAuth();
@@ -38,6 +39,16 @@ function Dashboard() {
         }
     };
 
+    const fetchRendimientoExtra = async () => {
+        try {
+            const res = await axios.get('/turnos/rendimiento/horas-extra');
+            setRendimientoExtra(Array.isArray(res.data) ? res.data : []);
+        } catch (e) {
+            console.error('Error fetching overtime performance:', e);
+            setRendimientoExtra([]);
+        }
+    };
+
     useEffect(() => {
         getNegocios();
         fetchMetrics();
@@ -46,6 +57,11 @@ function Dashboard() {
         const interval = setInterval(fetchTurnosActivos, 10000);
         return () => clearInterval(interval);
     }, []);
+
+    useEffect(() => {
+        if (Number(user?.is_super_admin || 0) !== 1) return;
+        fetchRendimientoExtra();
+    }, [user?.is_super_admin]);
 
     const negociosFiltrados = (Array.isArray(negocios) ? negocios : []).filter((negocio) =>
         negocio.nombre.toLowerCase().includes(busqueda.toLowerCase())
@@ -57,8 +73,9 @@ function Dashboard() {
         reset();
     });
 
-    const handleLogout = () => {
-        logout();
+    const handleLogout = async () => {
+        const ok = await logout();
+        if (!ok) return;
         navigate("/login");
     };
 
@@ -203,6 +220,34 @@ function Dashboard() {
                             </div>
                         </div>
                     </div>
+
+                    {Number(user?.is_super_admin || 0) === 1 && (
+                        <div className="bg-white rounded-2xl border border-purple-100 p-4 md:p-5 shadow-sm">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-sm md:text-base font-black text-purple-900">Rendimiento de Empleados · Tiempo Extra</h3>
+                                <span className="text-[10px] uppercase font-black tracking-widest text-purple-500">Solo Super Admin</span>
+                            </div>
+                            {rendimientoExtra.length === 0 ? (
+                                <p className="text-sm text-gray-400">Aun no hay historial de tiempo extra registrado.</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {rendimientoExtra.slice(0, 8).map((r, idx) => (
+                                        <div key={`extra-${r.usuario_id}`} className="rounded-xl border border-purple-100 bg-purple-50/50 px-3 py-2.5 flex items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-black text-gray-800">#{idx + 1} {r.nombre_usuario}</p>
+                                                <p className="text-[11px] font-semibold text-gray-500">{Number(r.turnos_con_extra || 0)} turnos con extra · {Number(r.total_extensiones || 0)} extensiones</p>
+                                                <p className="text-[11px] font-semibold text-emerald-700">Ventas: ${Number(r.ventas_totales || 0).toFixed(2)} · Promedio/turno: ${Number(r.venta_promedio_turno || 0).toFixed(2)}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-lg font-black text-purple-700">{Number(r.minutos_extra_total || 0)} min</p>
+                                                <p className="text-[10px] uppercase tracking-widest font-bold text-purple-400">acumulados</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </section>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">

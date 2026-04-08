@@ -1,4 +1,4 @@
-import { FaChartLine, FaBoxes, FaTruck, FaClipboardList } from 'react-icons/fa';
+import { FaChartLine, FaBoxes, FaTruck, FaClipboardList, FaWallet } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 import TurnoControl from '../admin/TurnoControl';
 
@@ -48,6 +48,12 @@ export default function DashboardCards() {
           description="Gestionar pedidos online de clientes."
           Icon={FaClipboardList}
           link='/pedidos'
+        />
+        <Card
+          title="Caja"
+          description="Registrar ingresos y egresos de efectivo."
+          Icon={FaWallet}
+          link='/gestion-caja'
         />
       </div>
     </div>

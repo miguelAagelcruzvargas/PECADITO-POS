@@ -7,8 +7,9 @@ export default function Navbar() {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    const ok = await logout();
+    if (!ok) return;
     navigate('/login');
   };
 

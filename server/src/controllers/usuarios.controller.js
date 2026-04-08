@@ -3,10 +3,11 @@ import bcrypt from "bcryptjs";
 import { createAccessToken } from "../libs/jwt.js";
 import jwt from "jsonwebtoken";
 import { TOKEN_SECRET } from "../config.js";
+import db from "../db.js";
 
 // Crear un nuevo usuario
 export const crear = async (req, res) => {
-  const { nombre, email, role, contraseña, negocios_id } = req.body;
+  const { nombre, email, role, contraseña, negocios_id, horario_entrada, horario_salida, tipo_turno } = req.body;
 
   try {
     if (!nombre || !email || !role || !contraseña) {
@@ -15,7 +16,7 @@ export const crear = async (req, res) => {
 
     const hash = await bcrypt.hash(contraseña, 10);
 
-    const usuario = { nombre, email, role, contraseña: hash, negocios_id, must_change_password: 1 };
+    const usuario = { nombre, email, role, contraseña: hash, negocios_id, must_change_password: 1, horario_entrada: horario_entrada || null, horario_salida: horario_salida || null, tipo_turno: tipo_turno || 'completo' };
 
     Usuarios.createUsuario(usuario, (error, result) => {
       if (error) {
@@ -36,6 +37,55 @@ export const crear = async (req, res) => {
 
   } catch (error) {
     console.error("Error en el controlador:", error);
+    res.status(500).json({ message: "Error interno del servidor", error });
+  }
+};
+
+// Crear empleado con credenciales auto-generadas
+export const crearEmpleado = async (req, res) => {
+  const { nombre, negocios_id, horario_entrada, horario_salida, tipo_turno } = req.body;
+
+  try {
+    if (!nombre || !negocios_id) {
+      return res.status(400).json({ message: "Nombre y negocio son obligatorios" });
+    }
+
+    // Generar credenciales únicas
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    const base = nombre.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '').substring(0, 12);
+    const email = `${base}${rand}@pecadito.pos`;
+    const contraseñaPlana = [...Array(8)].map(() => 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'.charAt(Math.floor(Math.random() * 54))).join('');
+    const hash = await bcrypt.hash(contraseñaPlana, 10);
+
+    const usuario = {
+      nombre,
+      email,
+      role: 'Empleado',
+      contraseña: hash,
+      negocios_id,
+      must_change_password: 0,
+      horario_entrada: horario_entrada || null,
+      horario_salida: horario_salida || null,
+      tipo_turno: tipo_turno || 'completo'
+    };
+
+    Usuarios.createUsuario(usuario, (error, result) => {
+      if (error) {
+        return res.status(500).json({ message: "Error al crear el empleado", error });
+      }
+      res.status(201).json({
+        id: result.insertId,
+        nombre,
+        email,
+        contraseña: contraseñaPlana, // Enviada solo esta vez
+        role: 'Empleado',
+        horario_entrada,
+        horario_salida,
+        tipo_turno: tipo_turno || 'completo'
+      });
+    });
+  } catch (error) {
+    console.error("Error al crear empleado:", error);
     res.status(500).json({ message: "Error interno del servidor", error });
   }
 };
@@ -86,15 +136,22 @@ export const obtenerUno = (req, res) => {
 export const actualizar = async (req, res) => {
   try {
     const { id } = req.params;
-    const { contraseña } = req.body;
+    const { contraseña, horario_entrada, horario_salida, tipo_turno } = req.body;
+    const data = {};
 
-    if (!contraseña) {
-      return res.status(400).json({ message: "Todos los campos son obligatorios" });
+    if (contraseña !== undefined && String(contraseña).trim() !== "") {
+      const hash = await bcrypt.hash(contraseña, 10);
+      data.contraseña = hash;
+      data.must_change_password = req.body.must_change_password ?? 0;
     }
 
-      const hash = await bcrypt.hash(contraseña, 10);
+    if (horario_entrada !== undefined) data.horario_entrada = horario_entrada || null;
+    if (horario_salida !== undefined) data.horario_salida = horario_salida || null;
+    if (tipo_turno !== undefined) data.tipo_turno = tipo_turno || 'completo';
 
-      const data = {contraseña: hash, must_change_password: req.body.must_change_password}
+    if (!Object.keys(data).length) {
+      return res.status(400).json({ message: "No hay campos para actualizar" });
+    }
 
     Usuarios.updateUsuario(id, data, (error, result) => {
       if (error) return res.status(500).json({ message: "Error al actualizar el usuario", error });
@@ -166,9 +223,17 @@ export const actualizarPerfil = async (req, res) => {
 export const eliminar = (req, res) => {
   const { id } = req.params;
 
-  Usuarios.deleteUsuario(id, (error, result) => {
-    if (error) return res.status(500).json({ message: "Error al eliminar el negocio", error });
-    res.status(200);
+  db.query('SELECT is_super_admin FROM usuarios WHERE id = ?', [id], (errCheck, rows) => {
+    if (errCheck) return res.status(500).json({ message: 'Error al verificar usuario' });
+    if (!rows || rows.length === 0) return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (rows[0].is_super_admin === 1) {
+      return res.status(403).json({ message: 'No se puede eliminar al administrador principal del sistema.' });
+    }
+
+    Usuarios.deleteUsuario(id, (error) => {
+      if (error) return res.status(500).json({ message: 'Error al eliminar el usuario', error });
+      res.status(200).json({ message: 'Usuario eliminado' });
+    });
   });
 };
 
@@ -212,6 +277,7 @@ export const login = async (req, res) => {
           nombre: usuario.nombre,
           email: usuario.email,
           role: usuario.role,
+          is_super_admin: usuario.is_super_admin || 0,
           negocios_id: usuario.negocios_id || null,
           nombre_negocio: usuario.nombre_negocio || null,
           permisos: usuario.permisos || null,
@@ -225,19 +291,25 @@ export const login = async (req, res) => {
 }
 
 export const logout = async (req, res) => {
+  let userId = req.user?.id;
 
-  const userId = req.user?.id;
-
-  if (!userId) {
-    return res.status(400).json({ message: "Usuario no autenticado" });
+  // En esta ruta no siempre viene req.user; intentamos obtener id desde cookie JWT.
+  if (!userId && req.cookies?.token) {
+    try {
+      const decoded = jwt.verify(req.cookies.token, TOKEN_SECRET);
+      userId = decoded?.id;
+    } catch (_e) {
+      userId = null;
+    }
   }
 
-  // Marcar al usuario como logueado
-  Usuarios.marcarComoLogout(userId, (err) => {
-    if (err) {
-      console.error("Error al marcar como logueado:", err);
-    }
-  });
+  if (userId) {
+    Usuarios.marcarComoLogout(userId, (err) => {
+      if (err) {
+        console.error("Error al marcar como logout:", err);
+      }
+    });
+  }
 
   res.cookie("token", "", {
     expires: new Date(0),
@@ -262,6 +334,7 @@ export const verifyToken = async (req, res) => {
       nombre: userFound.nombre,
       email: userFound.email,
       role: userFound.role,
+      is_super_admin: userFound.is_super_admin || 0,
       negocios_id: userFound.negocios_id || null,
       nombre_negocio: userFound.nombre_negocio || null,
       permisos: userFound.permisos || null,

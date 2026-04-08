@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useProveedores } from "../../context/ProveedoresContext";
 import { useInventario } from "../../context/InventarioContext";
-import { FaTrash, FaPlus, FaSearch, FaBoxOpen, FaEye, FaEyeSlash, FaEdit, FaExclamationTriangle, FaCubes } from "react-icons/fa";
+import { useToppings } from "../../context/ToppingsContext";
+import { FaTrash, FaPlus, FaSearch, FaBoxOpen, FaEye, FaEyeSlash, FaEdit, FaExclamationTriangle, FaCubes, FaCheckCircle } from "react-icons/fa";
 import Swal from "sweetalert2";
 import axios from "../../api/axios";
 
@@ -30,10 +31,21 @@ const Inventario = () => {
     stock: "",
     categoria: "General",
     presentacion: "",
-    mostrar_en_menu: 0
+    descripcion: "",
+    es_oferta: 0,
+    precio_anterior: "",
+    mostrar_en_menu: 0,
+    toppings_incluidos: 0,
+    toppings_fijos_ids: [],
+    insumo_id: "",
+    cantidad_insumo: ""
   });
+  const [showReceta, setShowReceta] = useState(false);
+  const [filtroBaseNombre, setFiltroBaseNombre] = useState("");
+  const [filtroBaseCategoria, setFiltroBaseCategoria] = useState("Todas");
 
   const { getValorid: getValorProveedores, proveedores } = useProveedores();
+  const { toppings, getToppings, categorias } = useToppings();
   const { Crear, inventario, getValorid, eliminarProducto, Actualizar } = useInventario();
 
   const id = JSON.parse(localStorage.getItem("negocioSeleccionado"))?.id;
@@ -136,7 +148,7 @@ const Inventario = () => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData();
     if(formulario.imagen) formData.append("imagen", formulario.imagen);
@@ -146,14 +158,22 @@ const Inventario = () => {
     formData.append("precio", formulario.precio);
     formData.append("stock", formulario.stock);
     formData.append("categoria", formulario.categoria);
+    formData.append("descripcion", formulario.descripcion || "");
+    formData.append("es_oferta", formulario.es_oferta);
+    formData.append("precio_anterior", formulario.precio_anterior || "");
     formData.append("mostrar_en_menu", formulario.mostrar_en_menu);
+    formData.append("toppings_incluidos", formulario.toppings_incluidos || 0);
+    formData.append("liquidos_incluidos", 0); // Unificado
+    formData.append("toppings_fijos_ids", JSON.stringify(formulario.toppings_fijos_ids || []));
     formData.append("negocio_id", !id ? usuario.negocios_id : id);
+    formData.append("insumo_id", formulario.insumo_id || "");
+    formData.append("cantidad_insumo", formulario.cantidad_insumo || "");
 
     if (editMode) {
-        Actualizar(selectedId, formData);
+        await Actualizar(selectedId, formData);
         Swal.fire({ title: "¡Actualizado!", icon: "success", confirmButtonColor: "#db2777" });
     } else {
-        Crear(formData);
+        await Crear(formData);
         Swal.fire({ title: "¡Creado!", icon: "success", confirmButtonColor: "#db2777" });
     }
 
@@ -170,17 +190,57 @@ const Inventario = () => {
       stock: "",
       categoria: "General",
       presentacion: "",
-      mostrar_en_menu: 0
+      descripcion: "",
+      es_oferta: 0,
+      precio_anterior: "",
+      mostrar_en_menu: 0,
+      toppings_incluidos: 0,
+      toppings_fijos_ids: [],
+      insumo_id: "",
+      cantidad_insumo: ""
     });
+    setShowReceta(false);
+    setFiltroBaseNombre("");
+    setFiltroBaseCategoria("Todas");
     setEditMode(false);
     setSelectedId(null);
   };
 
-  const handleEdit = (item) => {
+  const handleEdit = async (item) => {
+    // Buscar toppings fijos
+    let fijosIds = [];
+    try {
+        const res = await axios.get(`/inventario/${item.id}/toppings-fijos`);
+        fijosIds = res.data.map(t => t.id);
+    } catch (e) {
+        console.error("Error al obtener toppings fijos");
+    }
+
     setFormulario({
       ...item,
-      imagen: null // No cargamos la imagen actual en el file input
+      toppings_fijos_ids: fijosIds,
+      imagen: null,
+      insumo_id: "",
+      cantidad_insumo: ""
     });
+
+    // Buscar receta de producto
+    try {
+        const resReceta = await axios.get(`/recetas-producto/${item.id}`);
+        if (resReceta.data && resReceta.data.length > 0) {
+            setFormulario(prev => ({
+                ...prev,
+                insumo_id: resReceta.data[0].insumo_id,
+                cantidad_insumo: resReceta.data[0].cantidad_por_unidad
+            }));
+            setShowReceta(true);
+        } else {
+            setShowReceta(false);
+        }
+    } catch (e) {
+        setShowReceta(false);
+    }
+
     setSelectedId(item.id);
     setEditMode(true);
     setModalOpen(true);
@@ -212,10 +272,11 @@ const Inventario = () => {
     getValorProveedores();
     getValorid();
     fetchInsumos();
+    getToppings();
   }, []);
 
   return (
-    <div className="h-full p-3 md:p-6 bg-pink-50/20 flex flex-col overflow-hidden">
+    <div className="flex-1 p-3 md:p-6 bg-pink-50/20 flex flex-col h-[calc(100dvh-88px)] overflow-hidden">
       
       <header className="flex flex-col md:flex-row md:items-center justify-between mb-4 md:mb-6 gap-4 shrink-0">
         <div>
@@ -268,8 +329,8 @@ const Inventario = () => {
       {vista === "productos" && (
       <>
       {/* Tabla Premium */}
-      <div className="bg-white rounded-[32px] shadow-2xl shadow-pink-100/30 border border-pink-50 overflow-hidden flex-1 min-h-0">
-        <div className="table-scroll h-full max-h-none">
+      <div className="bg-white rounded-[24px] md:rounded-[32px] shadow-2xl shadow-pink-100/30 border border-pink-50 overflow-hidden flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
           <table className="min-w-full text-left border-collapse">
             <thead className="sticky top-0 z-10">
               <tr className="bg-pink-600 text-white text-[10px] uppercase tracking-[0.2em] font-black">
@@ -360,12 +421,12 @@ const Inventario = () => {
             </div>
             <div className="bg-white border border-pink-100 rounded-2xl p-4">
               <p className="text-[11px] uppercase tracking-widest text-gray-400 font-black">Unidades</p>
-              <p className="text-lg font-black text-pink-700 mt-1">pza / g / ml</p>
+              <p className="text-lg font-black text-pink-700 mt-1">pza / g / ml / kg / L</p>
             </div>
           </div>
 
-          <div className="bg-white rounded-[32px] shadow-2xl shadow-pink-100/30 border border-pink-50 overflow-hidden flex-1 min-h-0">
-            <div className="table-scroll h-full max-h-none">
+          <div className="bg-white rounded-[24px] md:rounded-[32px] shadow-2xl shadow-pink-100/30 border border-pink-50 overflow-hidden flex-1 min-h-0 flex flex-col">
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
               <table className="min-w-full text-left border-collapse">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-pink-600 text-white text-[10px] uppercase tracking-[0.2em] font-black">
@@ -482,10 +543,203 @@ const Inventario = () => {
                     <input type="number" name="stock" className="w-full bg-gray-50 border-2 border-transparent focus:border-pink-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none" value={formulario.stock} onChange={handleChange} required />
                   </div>
 
+                  <div className="col-span-2 space-y-3">
+                    <label className="block text-[10px] font-black text-pink-300 uppercase mb-1 px-1 tracking-widest leading-tight">
+                      Toppings de Receta Base (Siempre Gratis) <br/>
+                      <span className="text-[8px] italic lowercase font-bold text-gray-400">Selecciona los que ya vienen incluidos "sí o sí" en este producto.</span>
+                    </label>
+                    <div className="space-y-3 p-4 bg-pink-50/20 rounded-[2rem] border border-pink-50">
+                        <div className="flex flex-col sm:flex-row gap-2 items-center mb-1">
+                            {/* Buscador interno */}
+                            <div className="relative flex-1 w-full">
+                                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-pink-300" size={10} />
+                                <input 
+                                    type="text"
+                                    placeholder="Buscar topping..."
+                                    className="w-full pl-8 pr-4 py-2 bg-white border border-pink-100 rounded-xl text-[10px] font-bold outline-none focus:border-pink-300"
+                                    value={filtroBaseNombre}
+                                    onChange={(e) => setFiltroBaseNombre(e.target.value)}
+                                />
+                            </div>
+                            {/* Filtro categorías */}
+                            <div className="w-full sm:w-auto">
+                                <select 
+                                    className="w-full bg-white border border-pink-100 rounded-xl px-3 py-2 text-[10px] font-black uppercase outline-none focus:border-pink-300 transition-all text-pink-600"
+                                    value={filtroBaseCategoria}
+                                    onChange={(e) => setFiltroBaseCategoria(e.target.value)}
+                                >
+                                    <option value="Todas">Todas las categorías</option>
+                                    {categorias.map(cat => (
+                                        <option key={cat.id} value={cat.nombre}>{cat.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[280px] overflow-y-auto p-1 custom-scrollbar">
+                            {toppings
+                              .filter(top => {
+                                const matchPremium = !(top.categoria_nombre || "").toLowerCase().includes("premium");
+                                const matchNombre = top.nombre.toLowerCase().includes(filtroBaseNombre.toLowerCase());
+                                const matchCat = filtroBaseCategoria === "Todas" || top.categoria_nombre === filtroBaseCategoria;
+                                return matchPremium && matchNombre && matchCat;
+                              })
+                              .map(top => {
+                                const isSelected = formulario.toppings_fijos_ids.includes(top.id);
+                                return (
+                                    <button
+                                        key={top.id}
+                                        type="button"
+                                        onClick={() => {
+                                            const current = [...formulario.toppings_fijos_ids];
+                                            if (isSelected) {
+                                                setFormulario({...formulario, toppings_fijos_ids: current.filter(id => id !== top.id)});
+                                            } else {
+                                                setFormulario({...formulario, toppings_fijos_ids: [...current, top.id]});
+                                            }
+                                        }}
+                                        className={`flex items-center gap-2 p-2.5 rounded-xl text-[10px] font-bold border-2 transition-all ${
+                                            isSelected 
+                                            ? 'bg-pink-600 border-pink-600 text-white shadow-md' 
+                                            : 'bg-white border-pink-50 text-gray-500 hover:border-pink-200 shadow-sm'
+                                        }`}
+                                    >
+                                        <div className={`w-4 h-4 rounded-md flex items-center justify-center shrink-0 ${isSelected ? 'bg-white text-pink-600' : 'bg-gray-100 text-transparent'}`}>
+                                            <FaCheckCircle size={10} />
+                                        </div>
+                                        <div className="flex flex-col items-start overflow-hidden">
+                                          <span className="truncate w-full">{top.nombre}</span>
+                                          <span className={`text-[7px] uppercase tracking-tighter ${isSelected ? 'text-pink-100' : 'text-gray-300'}`}>{top.categoria_nombre || 'S/C'}</span>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {toppings.filter(top => {
+                            const matchPremium = !(top.categoria_nombre || "").toLowerCase().includes("premium");
+                            const matchNombre = top.nombre.toLowerCase().includes(filtroBaseNombre.toLowerCase());
+                            const matchCat = filtroBaseCategoria === "Todas" || top.categoria_nombre === filtroBaseCategoria;
+                            return matchPremium && matchNombre && matchCat;
+                        }).length === 0 && (
+                          <div className="text-center py-6">
+                            <p className="text-gray-400 font-bold italic text-xs">No se encontraron toppings...</p>
+                          </div>
+                        )}
+                    </div>
+                  </div>
+
                   <div className="col-span-2">
                     <label className="block text-[10px] font-black text-pink-300 uppercase mb-1 px-1 tracking-widest">Categoría del Menú</label>
                     <input type="text" placeholder="Eje: Vasos, Especiales, Extras..." name="categoria" className="w-full bg-gray-50 border-2 border-transparent focus:border-pink-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none" value={formulario.categoria} onChange={handleChange} />
                   </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-black text-pink-300 uppercase mb-1 px-1 tracking-widest">Descripción del Producto (¡Enamora al cliente!)</label>
+                    <textarea 
+                      placeholder="Eje: Un deleite para tus sentidos. Preparado con nuestra receta secreta y los ingredientes más frescos..." 
+                      name="descripcion" 
+                      rows="3"
+                      className="w-full bg-gray-50 border-2 border-transparent focus:border-pink-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none transition-all resize-none" 
+                      value={formulario.descripcion} 
+                      onChange={handleChange}
+                    ></textarea>
+                  </div>
+              </div>
+
+              <div className="bg-amber-50/50 p-6 rounded-[2rem] border-2 border-amber-100/50 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-amber-200">
+                        <FaExclamationTriangle size={16} />
+                      </div>
+                      <div>
+                        <h4 className="text-[11px] font-black text-amber-800 uppercase tracking-widest">¿Es una Oferta Especial?</h4>
+                        <p className="text-[9px] font-bold text-amber-600/70 uppercase">Activa el distintivo de promoción</p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer"
+                        checked={formulario.es_oferta === 1}
+                        onChange={(e) => setFormulario({...formulario, es_oferta: e.target.checked ? 1 : 0})}
+                      />
+                      <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-6 after:transition-all peer-checked:bg-amber-500"></div>
+                    </label>
+                  </div>
+
+                  {formulario.es_oferta === 1 && (
+                    <div className="animate-in fade-in slide-in-from-top-2 duration-300 pt-2">
+                       <label className="block text-[10px] font-black text-amber-600 uppercase mb-2 px-1 tracking-widest text">Precio Anterior (Sin descuento)</label>
+                       <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-400 font-black">$</span>
+                          <input 
+                            type="number" 
+                            step="0.01" 
+                            placeholder="Eje: 120.00"
+                            name="precio_anterior" 
+                            className="w-full bg-white border-2 border-amber-100 focus:border-amber-400 rounded-2xl px-8 py-3 text-sm font-bold outline-none transition-all text-amber-700" 
+                            value={formulario.precio_anterior} 
+                            onChange={handleChange} 
+                          />
+                       </div>
+                    </div>
+                  )}
+              </div>
+
+              <div className="bg-pink-50/50 p-6 rounded-[2rem] border-2 border-pink-100/50 space-y-4">
+                  <div className="flex items-center justify-between">
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-pink-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-pink-200">
+                          <FaCubes size={16} />
+                        </div>
+                        <div>
+                          <h4 className="text-[11px] font-black text-pink-800 uppercase tracking-widest leading-tight">Vincular con Insumos <br/><span className="text-[8px] text-pink-400 font-bold italic">¿Este producto descuenta vasos, envases, etc?</span></h4>
+                        </div>
+                     </div>
+                     <button 
+                        type="button"
+                        onClick={() => setShowReceta(!showReceta)}
+                        className={`text-[10px] font-bold px-4 py-2 rounded-full transition-all ${showReceta ? 'bg-pink-600 text-white' : 'bg-gray-200 text-gray-400'}`}
+                     >
+                        {showReceta ? 'SÍ, VINCULAR' : 'NO'}
+                     </button>
+                  </div>
+
+                  {showReceta && (
+                    <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="col-span-2 sm:col-span-1">
+                            <label className="block text-[10px] font-black text-pink-300 uppercase mb-1 px-1 tracking-widest">Insumo a descontar</label>
+                            <select 
+                                name="insumo_id"
+                                value={formulario.insumo_id}
+                                onChange={handleChange}
+                                className="w-full bg-white border-2 border-pink-50 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-pink-200"
+                            >
+                                <option value="">Seleccionar...</option>
+                                {insumos.map(i => <option key={i.id} value={i.id}>{i.nombre} ({i.unidad})</option>)}
+                            </select>
+                        </div>
+                        <div className="col-span-2 sm:col-span-1">
+                            <label className="block text-[10px] font-black text-pink-300 uppercase mb-1 px-1 tracking-widest">Cantidad por venta</label>
+                            <div className="relative">
+                                <input 
+                                    type="number"
+                                    step="0.001"
+                                    name="cantidad_insumo"
+                                    value={formulario.cantidad_insumo}
+                                    onChange={handleChange}
+                                    placeholder="Ej: 1"
+                                    className="w-full bg-white border-2 border-pink-50 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-pink-200"
+                                />
+                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-pink-400">
+                                    {insumos.find(i => i.id == formulario.insumo_id)?.unidad || '-'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                  )}
               </div>
 
               <div className="flex items-center gap-3 bg-pink-50/30 p-4 rounded-2xl border border-pink-100">
@@ -501,8 +755,8 @@ const Inventario = () => {
                   </label>
               </div>
 
-              <button type="submit" className="w-full bg-gradient-to-r from-pink-600 to-pink-500 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-pink-100 transition-all active:scale-95 group">
-                <span className="group-hover:mr-2 transition-all">{editMode ? 'Guardar Cambios' : 'Registrar Producto'}</span> {editMode ? <FaEdit /> : <FaPlus />}
+              <button type="submit" className="w-full bg-pink-600 hover:bg-pink-700 text-white py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-pink-100 transition-all active:scale-95">
+                {editMode ? 'Guardar Cambios' : 'Registrar Producto'}
               </button>
             </form>
           </div>
@@ -548,6 +802,8 @@ const Inventario = () => {
                     <option value="pza">pza</option>
                     <option value="g">g</option>
                     <option value="ml">ml</option>
+                    <option value="kg">kg</option>
+                    <option value="L">L</option>
                   </select>
                 </div>
 

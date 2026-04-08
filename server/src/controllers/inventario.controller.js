@@ -1,14 +1,19 @@
 import * as Inventario from "../models/inventario.model.js";
+import db from "../db.js";
 import TelegramService from '../services/TelegramService.js';
 
 // Crear un nuevo producto
 export const crear = async (req, res) => {
   try {
-    const { producto, proveedor, presentacion, precio, stock, negocio_id, categoria } = req.body;
+    const { 
+      producto, proveedor, presentacion, precio, stock, negocio_id, categoria,
+      toppings_incluidos, liquidos_incluidos, toppings_fijos_ids,
+      insumo_id, cantidad_insumo
+    } = req.body;
 
     // Validación básica
     if (!req.file || !producto || !presentacion || !precio || !stock || !negocio_id) {
-      return res.status(400).json({ message: "Todos los campos son obligatorios" });
+      return res.status(400).json({ message: "Todos los campos básicos son obligatorios" });
     }
 
     // Convertir a valores numéricos
@@ -32,7 +37,9 @@ export const crear = async (req, res) => {
       precio: precioNum,
       stock: stockNum,
       negocio_id: negocioId,
-      categoria: categoria || 'General'
+      categoria: categoria || 'General',
+      toppings_incluidos: parseInt(toppings_incluidos) || 0,
+      liquidos_incluidos: parseInt(liquidos_incluidos) || 0
     };
 
     // Inserción a la base de datos
@@ -45,7 +52,32 @@ export const crear = async (req, res) => {
         return res.status(409).json({ message: "⚠️ El producto ya está registrado" });
       }
 
-      res.status(201).json({ producto: productoGenerado });
+      const inventarioId = result.insertId;
+      
+      // Guardar toppings fijos si vienen
+      let fixedToppings = [];
+      try {
+        fixedToppings = typeof toppings_fijos_ids === 'string' ? JSON.parse(toppings_fijos_ids) : (toppings_fijos_ids || []);
+      } catch (e) {
+        fixedToppings = [];
+      }
+
+      // Vincular insumo principal (receta)
+      if (insumo_id && cantidad_insumo) {
+          db.query('INSERT INTO receta_producto_insumo (producto_id, insumo_id, cantidad_por_unidad) VALUES (?, ?, ?)',
+          [inventarioId, insumo_id, cantidad_insumo], (errRec) => {
+              if (errRec) console.error("Error al vincular insumo a producto:", errRec);
+          });
+      }
+
+      if (fixedToppings.length > 0) {
+        Inventario.saveFixedToppings(inventarioId, fixedToppings, (errF) => {
+          if (errF) console.error("Error al guardar toppings fijos:", errF);
+          res.status(201).json({ producto: { ...productoGenerado, id: inventarioId } });
+        });
+      } else {
+        res.status(201).json({ producto: { ...productoGenerado, id: inventarioId } });
+      }
     });
 
   } catch (error) {
@@ -84,6 +116,14 @@ export const obtenerValoresid = (req, res) => {
       return res.status(404).json({ message: 'valor no encontrado' });
     }
 
+    res.json(result);
+  });
+};
+
+export const obtenerToppingsFijos = (req, res) => {
+  const { id } = req.params;
+  Inventario.getFixedToppings(id, (err, result) => {
+    if (err) return res.status(500).json({ message: 'Error al obtener toppings fijos', err });
     res.json(result);
   });
 };
@@ -137,10 +177,52 @@ export const actualizar = (req, res) => {
     updateData.imagen = `/public/${req.file.filename}`;
   }
 
+  // Eliminar campos que NO pertenecen a la tabla inventario directamente
+  delete updateData.toppings_fijos_ids;
+  delete updateData.insumo_id;
+  delete updateData.cantidad_insumo;
+  delete updateData.negocio_id; // No permitimos cambiar el negocio del producto
+
   Inventario.updateInventario(idNumber, updateData, (error, result) => {
     if (error) return res.status(500).json({ message: "Error al actualizar el producto", error });
     if (result.affectedRows === 0) return res.status(404).json({ message: 'Producto no encontrado' });
-    res.status(200).json({ message: 'Producto actualizado con éxito' });
+
+    // Actualizar toppings fijos si vienen en el body
+    if (req.body.toppings_fijos_ids !== undefined) {
+      let fixedToppings = [];
+      try {
+        fixedToppings = typeof req.body.toppings_fijos_ids === 'string' ? JSON.parse(req.body.toppings_fijos_ids) : (req.body.toppings_fijos_ids || []);
+      } catch (e) {
+        fixedToppings = [];
+      }
+      
+      Inventario.saveFixedToppings(idNumber, fixedToppings, (errF) => {
+        if (errF) console.error("Error al actualizar toppings fijos:", errF);
+        
+        // Actualizar receta de producto
+        const { insumo_id, cantidad_insumo } = req.body;
+        db.query('DELETE FROM receta_producto_insumo WHERE producto_id = ?', [idNumber], () => {
+             if (insumo_id && cantidad_insumo) {
+                 db.query('INSERT INTO receta_producto_insumo (producto_id, insumo_id, cantidad_por_unidad) VALUES (?, ?, ?)',
+                 [idNumber, insumo_id, cantidad_insumo]);
+             }
+        });
+
+        res.status(200).json({ message: 'Producto actualizado con éxito' });
+      });
+    } else {
+        // Actualizar receta de producto inclusive si no hay toppings fijos
+        const { insumo_id, cantidad_insumo } = req.body;
+        if (insumo_id !== undefined) {
+          db.query('DELETE FROM receta_producto_insumo WHERE producto_id = ?', [idNumber], () => {
+               if (insumo_id && cantidad_insumo) {
+                   db.query('INSERT INTO receta_producto_insumo (producto_id, insumo_id, cantidad_por_unidad) VALUES (?, ?, ?)',
+                   [idNumber, insumo_id, cantidad_insumo]);
+               }
+          });
+        }
+        res.status(200).json({ message: 'Producto actualizado con éxito' });
+    }
   });
 };
 

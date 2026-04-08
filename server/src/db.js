@@ -14,15 +14,23 @@ db.connect((err) => {
   }
   console.log('>>> Conectado a la base de datos MySQL');
 
-  // Verificar/crear columnas para Identidad de Marca en negocios
-  const checkNegColsSql = `SHOW COLUMNS FROM negocios LIKE 'rfc'`;
-  db.query(checkNegColsSql, (errCols, rows) => {
-    if (errCols) return;
-    if (rows.length === 0) {
-      db.query('ALTER TABLE negocios ADD COLUMN rfc VARCHAR(20), ADD COLUMN eslogan VARCHAR(255), ADD COLUMN logo VARCHAR(255)', (errAlter) => {
-        if (!errAlter) console.log('>>> Columnas de identidad (rfc, eslogan, logo) añadidas a negocios');
-      });
-    }
+  // Verificar/crear columnas para Identidad de Marca y Sincronización en negocios
+  const ensureNegocioColumns = [
+    { name: 'rfc', sql: 'ALTER TABLE negocios ADD COLUMN rfc VARCHAR(20)' },
+    { name: 'eslogan', sql: 'ALTER TABLE negocios ADD COLUMN eslogan VARCHAR(255)' },
+    { name: 'logo', sql: 'ALTER TABLE negocios ADD COLUMN logo VARCHAR(255)' },
+    { name: 'last_update', sql: 'ALTER TABLE negocios ADD COLUMN last_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP' }
+  ];
+
+  ensureNegocioColumns.forEach(idCol => {
+    db.query(`SHOW COLUMNS FROM negocios LIKE '${idCol.name}'`, (errCheck, rows) => {
+      if (errCheck) return;
+      if (rows.length === 0) {
+        db.query(idCol.sql, (errAlter) => {
+          if (!errAlter) console.log(`>>> Columna negocios.${idCol.name} añadida`);
+        });
+      }
+    });
   });
 
   // Verificar/crear columnas para Tickets en configuraciones
@@ -295,6 +303,129 @@ db.connect((err) => {
     }
   });
 
+  // MÓDULO 1: metodo_pago en pedidos_digitales
+  const checkMetodoPagoSql = `SHOW COLUMNS FROM pedidos_digitales LIKE 'metodo_pago'`;
+  db.query(checkMetodoPagoSql, (errMP, rowsMP) => {
+    if (errMP) return;
+    if (rowsMP.length === 0) {
+      db.query("ALTER TABLE pedidos_digitales ADD COLUMN metodo_pago ENUM('contra_entrega','transferencia') NOT NULL DEFAULT 'contra_entrega' AFTER tipo_entrega", (errAlterMP) => {
+        if (!errAlterMP) console.log('>>> Columna pedidos_digitales.metodo_pago añadida');
+      });
+    }
+  });
+
+  // MÓDULO 1: Datos de transferencia bancaria en configuraciones
+  const checkBancoNombreSql = `SHOW COLUMNS FROM configuraciones LIKE 'banco_nombre'`;
+  db.query(checkBancoNombreSql, (errBNom, rowsBNom) => {
+    if (errBNom) return;
+    if (rowsBNom.length === 0) {
+      db.query(`ALTER TABLE configuraciones
+        ADD COLUMN banco_nombre VARCHAR(100) NULL,
+        ADD COLUMN banco_titular VARCHAR(150) NULL,
+        ADD COLUMN banco_cuenta VARCHAR(50) NULL,
+        ADD COLUMN banco_clabe VARCHAR(18) NULL,
+        ADD COLUMN banco_concepto VARCHAR(100) NULL`, (errAlterBanco) => {
+          if (!errAlterBanco) console.log('>>> Columnas banco_* añadidas a configuraciones');
+        });
+    }
+  });
+
+  // MÓDULO 2: Horarios y tipo de turno en usuarios
+  const checkHorarioEntradaSql = `SHOW COLUMNS FROM usuarios LIKE 'horario_entrada'`;
+  db.query(checkHorarioEntradaSql, (errHE, rowsHE) => {
+    if (errHE) return;
+    if (rowsHE.length === 0) {
+      db.query(`ALTER TABLE usuarios
+        ADD COLUMN horario_entrada TIME NULL,
+        ADD COLUMN horario_salida TIME NULL,
+        ADD COLUMN tipo_turno ENUM('completo','medio_turno') NOT NULL DEFAULT 'completo'`, (errAlterHorario) => {
+          if (!errAlterHorario) console.log('>>> Columnas horario_entrada, horario_salida, tipo_turno añadidas a usuarios');
+        });
+    }
+  });
+
+  // MÓDULO 3: Desglose de caja en turnos
+  const checkMontoFinalSql = `SHOW COLUMNS FROM turnos LIKE 'monto_final_declarado'`;
+  db.query(checkMontoFinalSql, (errMF, rowsMF) => {
+    if (errMF) return;
+    if (rowsMF.length === 0) {
+      db.query(`ALTER TABLE turnos
+        ADD COLUMN monto_final_declarado DECIMAL(12,2) NULL,
+        ADD COLUMN total_efectivo DECIMAL(12,2) NULL,
+        ADD COLUMN total_transferencia DECIMAL(12,2) NULL`, (errAlterTurnos) => {
+          if (!errAlterTurnos) console.log('>>> Columnas de desglose añadidas a turnos');
+        });
+    }
+  });
+
+  // MÓDULO: Categorías de Toppings
+  db.query(`
+    CREATE TABLE IF NOT EXISTS toppings_categorias (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      nombre VARCHAR(100) NOT NULL,
+      negocio_id INT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_top_cat_negocio (negocio_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `, (errCat) => {
+    if (!errCat) console.log('>>> Tabla toppings_categorias verificada');
+  });
+
+  // MÓDULO: Actualizar tabla toppings con categoria_id
+  const checkToppingCatColSql = `SHOW COLUMNS FROM toppings LIKE 'categoria_id'`;
+  db.query(checkToppingCatColSql, (errTC, rowsTC) => {
+    if (errTC) return;
+    if (rowsTC.length === 0) {
+      db.query('ALTER TABLE toppings ADD COLUMN categoria_id INT NULL AFTER negocio_id', (errAlterTC) => {
+        if (!errAlterTC) console.log('>>> Columna toppings.categoria_id añadida');
+      });
+    }
+  });
+
+  // MÓDULO: Actualizar inventario con toppings incluidos
+  const checkInvToppingsInclSql = `SHOW COLUMNS FROM inventario LIKE 'toppings_incluidos'`;
+  db.query(checkInvToppingsInclSql, (errITI, rowsITI) => {
+    if (errITI) return;
+    if (rowsITI.length === 0) {
+      db.query(`ALTER TABLE inventario 
+        ADD COLUMN toppings_incluidos INT DEFAULT 0,
+        ADD COLUMN liquidos_incluidos INT DEFAULT 0`, (errAlterITI) => {
+        if (!errAlterITI) console.log('>>> Columnas de toppings/liquidos incluidos añadidas a inventario');
+      });
+    }
+  });
+
+  // MÓDULO: Toppings fijos (específicos) por producto
+  db.query(`
+    CREATE TABLE IF NOT EXISTS inventario_toppings_fijos (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      inventario_id INT NOT NULL,
+      topping_id INT NOT NULL,
+      UNIQUE KEY uk_inv_top_fijo (inventario_id, topping_id),
+      INDEX idx_inv_fijo_inv (inventario_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `, (errFijos) => {
+    if (!errFijos) console.log('>>> Tabla inventario_toppings_fijos verificada');
+  });
+
+  // MÓDULO: Tabla movimientos_caja
+  db.query(`
+    CREATE TABLE IF NOT EXISTS movimientos_caja (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      negocio_id INT NOT NULL,
+      turno_id INT NULL,
+      usuario_id INT NOT NULL,
+      tipo ENUM('ingreso','egreso') NOT NULL,
+      monto DECIMAL(12,2) NOT NULL,
+      concepto VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_movimientos_negocio (negocio_id),
+      INDEX idx_movimientos_turno (turno_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `, (errCaja) => {
+    if (!errCaja) console.log('>>> Tabla movimientos_caja verificada');
+  });
+
   // Tablas base para control de insumos (piezas/gramos/ml) y recetas de consumo
   db.query(`
     CREATE TABLE IF NOT EXISTS insumos (
@@ -361,5 +492,34 @@ db.connect((err) => {
     if (!errTelegramLog) console.log('>>> Tabla telegram_alert_log verificada');
   });
 });
+
+/**
+ * Forzar creación de tablas si no existen (Fallback)
+ */
+export const checkToppingsTable = () => {
+    db.query(`
+      CREATE TABLE IF NOT EXISTS toppings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nombre VARCHAR(100) NOT NULL,
+        precio DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        negocio_id INT NOT NULL,
+        categoria_id INT NULL,
+        activo TINYINT(1) DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `, (err) => {
+      if (!err) console.log('>>> Tabla toppings verificada');
+    });
+};
+
+checkToppingsTable();
+
+export const triggerSyncUpdate = (negocioId) => {
+    if (!negocioId) return;
+    const sql = 'UPDATE negocios SET last_update = CURRENT_TIMESTAMP WHERE id = ?';
+    db.query(sql, [negocioId], (err) => {
+        if (err) console.error('>>> Error al actualizar sello de sincronización:', err);
+    });
+};
 
 export default db;
