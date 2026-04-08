@@ -21,3 +21,6 @@ server/public/*.png
 server/public/*.jpg
 server/public/*.jpeg
 server/public/*.webp
+
+# Utilerías, seeds y tests locales
+tests/
