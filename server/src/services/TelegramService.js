@@ -14,6 +14,7 @@ class TelegramService {
     this.token = null;
     this.chatId = null;
     this.lastCleanupByBusiness = new Map();
+    this.sending = new Set(); // Bloqueo para evitar duplicados simultáneos
   }
 
   async getAlertCleanupConfig(negocioId) {
@@ -139,15 +140,25 @@ class TelegramService {
       .map((p) => `${p.id || p.producto}-${p.stock}`)
       .sort()
       .join('|')}`;
-    if (!options.force && !(await this.shouldSendAlert(negocioId, 'low_stock_products', signature))) return;
     
-    let message = `⚠️ <b>ALERTA DE STOCK BAJO</b>\n\n`;
-    products.forEach(p => {
-      message += `• ${p.producto}: ${p.stock} unidades\n`;
-    });
-    
-    await this.sendMessage(negocioId, message);
-    await this.markAlertSent(negocioId, 'low_stock_products', signature);
+    // Evitar duplicados simultáneos (Race Condition)
+    const lockKey = `${negocioId}:low_stock_products:${signature}`;
+    if (this.sending.has(lockKey)) return;
+    this.sending.add(lockKey);
+
+    try {
+      if (!options.force && !(await this.shouldSendAlert(negocioId, 'low_stock_products', signature))) return;
+      
+      let message = `⚠️ <b>ALERTA DE STOCK BAJO</b>\n\n`;
+      products.forEach(p => {
+        message += `• ${p.producto}: ${p.stock} unidades\n`;
+      });
+      
+      await this.sendMessage(negocioId, message);
+      await this.markAlertSent(negocioId, 'low_stock_products', signature);
+    } finally {
+      this.sending.delete(lockKey);
+    }
   }
 
   async sendInventoryLowStockAlert(negocioId, { products = [], insumos = [] } = {}, options = {}) {
@@ -157,27 +168,37 @@ class TelegramService {
       `products:${products.map((p) => `${p.id || p.producto}-${p.stock}`).sort().join('|')}`,
       `insumos:${insumos.map((i) => `${i.id || i.nombre}-${i.stock_actual}`).sort().join('|')}`
     ].join('||');
-    if (!options.force && !(await this.shouldSendAlert(negocioId, 'inventory_low_stock', signature))) return;
 
-    let message = `⚠️ <b>ALERTA DE STOCK BAJO</b>\n\n`;
+    // Evitar duplicados simultáneos
+    const lockKey = `${negocioId}:inventory_low_stock:${signature}`;
+    if (this.sending.has(lockKey)) return;
+    this.sending.add(lockKey);
 
-    if (products.length > 0) {
-      message += `<b>Productos:</b>\n`;
-      products.forEach((p) => {
-        message += `• ${p.producto}: ${p.stock} unidades\n`;
-      });
-      message += `\n`;
+    try {
+      if (!options.force && !(await this.shouldSendAlert(negocioId, 'inventory_low_stock', signature))) return;
+
+      let message = `⚠️ <b>ALERTA DE STOCK BAJO</b>\n\n`;
+
+      if (products.length > 0) {
+        message += `<b>Productos:</b>\n`;
+        products.forEach((p) => {
+          message += `• ${p.producto}: ${p.stock} unidades\n`;
+        });
+        message += `\n`;
+      }
+
+      if (insumos.length > 0) {
+        message += `<b>Insumos:</b>\n`;
+        insumos.forEach((i) => {
+          message += `• ${i.nombre}: ${i.stock_actual} ${i.unidad}\n`;
+        });
+      }
+
+      await this.sendMessage(negocioId, message);
+      await this.markAlertSent(negocioId, 'inventory_low_stock', signature);
+    } finally {
+      this.sending.delete(lockKey);
     }
-
-    if (insumos.length > 0) {
-      message += `<b>Insumos:</b>\n`;
-      insumos.forEach((i) => {
-        message += `• ${i.nombre}: ${i.stock_actual} ${i.unidad}\n`;
-      });
-    }
-
-    await this.sendMessage(negocioId, message);
-    await this.markAlertSent(negocioId, 'inventory_low_stock', signature);
   }
 
   async sendDailySummary(negocioId, summary) {
@@ -187,6 +208,52 @@ class TelegramService {
     message += `🕒 Hora: ${new Date().toLocaleTimeString()}\n`;
     
     await this.sendMessage(negocioId, message);
+  }
+
+  async sendShiftClosingReport(negocioId, data) {
+    const { 
+      negocioNombre, empleadoNombre, totalVentas, totalEfectivo, 
+      totalTransferencia, totalGastos, montoEsperado, montoDeclarado, diferencia 
+    } = data;
+
+    let message = `🏁 <b>CIERRE DE TURNO DETALLADO</b>\n\n`;
+    message += `📍 <b>Sucursal:</b> ${negocioNombre}\n`;
+    message += `👤 <b>Empleado:</b> ${empleadoNombre}\n`;
+    message += `━━━━━━━━━━━━━━━━━━\n\n`;
+    
+    message += `💰 <b>RESUMEN DE VENTAS</b>\n`;
+    message += `• Total Ventas: $${Number(totalVentas).toFixed(2)}\n`;
+    message += `  ﹂ 💵 Efectivo: $${Number(totalEfectivo).toFixed(2)}\n`;
+    message += `  ﹂ 💳 Transfer: $${Number(totalTransferencia).toFixed(2)}\n\n`;
+    
+    message += `💸 <b>MOVIMIENTOS DE CAJA</b>\n`;
+    message += `• Gastos/Egresos: $${Number(totalGastos).toFixed(2)}\n\n`;
+    
+    message += `📊 <b>AUDITORÍA DE CAJA</b>\n`;
+    message += `• Esperado: $${Number(montoEsperado).toFixed(2)}\n`;
+    message += `• Declarado: $${Number(montoDeclarado).toFixed(2)}\n`;
+    
+    if (Math.abs(diferencia) < 0.01) {
+      message += `✅ <b>¡Caja Cuadrada!</b>\n`;
+    } else if (diferencia < 0) {
+      message += `❌ <b>FALTANTE: -$${Math.abs(diferencia).toFixed(2)}</b>\n`;
+    } else {
+      message += `⚠️ <b>SOBRANTE: +$${Math.abs(diferencia).toFixed(2)}</b>\n`;
+    }
+
+    message += `\n🕒 <b>Cierre:</b> ${new Date().toLocaleString('es-MX')}`;
+
+    return this.sendMessage(negocioId, message);
+  }
+
+  async sendTransferNotification(negocioId, { negocioNombre, total }) {
+    let message = `🏦 <b>¡NUEVA TRANSFERENCIA RECIBIDA!</b>\n\n`;
+    message += `📍 <b>Sucursal:</b> ${negocioNombre}\n`;
+    message += `💰 <b>Monto:</b> $${Number(total).toFixed(2)}\n`;
+    message += `🕒 <b>Hora:</b> ${new Date().toLocaleString('es-MX')}\n\n`;
+    message += `📌 <i>Por favor, verifica tu banca para confirmar el depósito.</i>`;
+
+    return this.sendMessage(negocioId, message);
   }
 }
 

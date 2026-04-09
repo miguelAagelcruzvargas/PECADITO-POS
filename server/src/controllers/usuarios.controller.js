@@ -165,57 +165,71 @@ export const actualizar = async (req, res) => {
 export const actualizarPerfil = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, email, contraseña } = req.body;
+    const { nombre, email, contraseña, contraseñaActual } = req.body;
 
-    if (!nombre || !email) {
-      return res.status(400).json({ message: "Nombre y correo son obligatorios" });
+    if (!contraseñaActual) {
+      return res.status(400).json({ message: "Debes proporcionar tu contraseña actual para confirmar los cambios." });
     }
 
-    const usuarioActual = await Usuarios.getUsuarioById(id);
-    if (!usuarioActual) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
-    }
+    // Buscar al usuario en la base de datos para comparar la contraseña actual
+    db.query("SELECT * FROM usuarios WHERE id = ?", [id], async (err, rows) => {
+      if (err) return res.status(500).json({ message: "Error al validar identidad", err });
+      const usuarioActual = rows?.[0];
 
-    // Verificar que el correo no pertenezca a otro usuario.
-    Usuarios.getUsuarioPorEmail(email, async (errMail, rowsMail) => {
-      if (errMail) return res.status(500).json({ message: "Error validando correo", errMail });
-
-      const existente = rowsMail?.[0];
-      if (existente && Number(existente.id) !== Number(id)) {
-        return res.status(409).json({ message: "Ese correo ya está en uso" });
+      if (!usuarioActual) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
       }
 
-      const payload = { nombre, email };
+      // 1. Validar que la contraseña actual es la correcta
+      const isMatch = await bcrypt.compare(contraseñaActual, usuarioActual.contraseña);
+      if (!isMatch) {
+        return res.status(401).json({ message: "La contraseña actual es incorrecta. No se pueden guardar los cambios." });
+      }
+
+      // 2. Si se cambia el email, verificar disponibilidad
+      if (email && email !== usuarioActual.email) {
+        const checkEmailSql = "SELECT id FROM usuarios WHERE email = ? AND id <> ?";
+        const emailRows = await new Promise((resolve, reject) => {
+          db.query(checkEmailSql, [email, id], (e, r) => e ? reject(e) : resolve(r));
+        });
+
+        if (emailRows.length > 0) {
+          return res.status(409).json({ message: "Ese correo electrónico ya está siendo usado por otro administrador." });
+        }
+      }
+
+      // 3. Preparar los datos a actualizar
+      const actualizacion = { 
+        nombre: nombre || usuarioActual.nombre, 
+        email: email || usuarioActual.email 
+      };
 
       if (contraseña && String(contraseña).trim() !== "") {
         if (String(contraseña).length < 8) {
-          return res.status(400).json({ message: "La contraseña debe tener mínimo 8 caracteres" });
+          return res.status(400).json({ message: "La nueva contraseña debe tener al menos 8 caracteres para ser segura." });
         }
-        payload.contraseña = await bcrypt.hash(contraseña, 10);
+        actualizacion.contraseña = await bcrypt.hash(contraseña, 10);
       }
 
-      Usuarios.updatePerfilUsuario(id, payload, async (errorUpdate) => {
-        if (errorUpdate) return res.status(500).json({ message: "Error al actualizar perfil", errorUpdate });
+      // 4. Ejecutar la actualización
+      Usuarios.updatePerfilUsuario(id, actualizacion, (errorUpdate) => {
+        if (errorUpdate) return res.status(500).json({ message: "Error al actualizar perfil en la base de datos.", errorUpdate });
 
-        const userUpdated = await Usuarios.getUsuarioById(id);
-        return res.status(200).json({
-          message: "Perfil actualizado",
+        res.status(200).json({
+          message: "¡Perfil actualizado con éxito!",
           user: {
-            id: userUpdated.id,
-            nombre: userUpdated.nombre,
-            email: userUpdated.email,
-            role: userUpdated.role,
-            negocios_id: userUpdated.negocios_id || null,
-            nombre_negocio: userUpdated.nombre_negocio || null,
-            permisos: userUpdated.permisos || null,
-            must_change_password: userUpdated.must_change_password || false
+            id: usuarioActual.id,
+            nombre: actualizacion.nombre,
+            email: actualizacion.email,
+            role: usuarioActual.role,
+            is_super_admin: usuarioActual.is_super_admin
           }
         });
       });
     });
   } catch (error) {
     console.error("Error al actualizar perfil:", error);
-    res.status(500).json({ message: "Error interno del servidor", error });
+    res.status(500).json({ message: "Error crítico del servidor", error });
   }
 };
 

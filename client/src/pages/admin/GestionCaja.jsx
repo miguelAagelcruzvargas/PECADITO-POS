@@ -4,10 +4,12 @@ import Swal from "sweetalert2";
 import { FaArrowUp, FaArrowDown, FaWallet, FaPlus, FaMinus } from "react-icons/fa";
 import { useTurno } from "../../context/TurnoContext";
 import { useAuth } from "../../context/UsuariosContext";
+import { useGastos } from "../../context/GastosContext";
 
 export default function GestionCaja() {
   const { turnoActual } = useTurno();
   const { user } = useAuth();
+  const { crearGasto } = useGastos();
   const negocioSeleccionado = JSON.parse(localStorage.getItem("negocioSeleccionado"));
   const negocioId = negocioSeleccionado?.id;
 
@@ -48,23 +50,40 @@ export default function GestionCaja() {
 
   const handleRegistrar = async (e) => {
     e.preventDefault();
-    if (!form.monto || parseFloat(form.monto) <= 0) return Swal.fire("Monto inválido", "Ingresa un monto mayor a 0", "warning");
+    const montoNum = parseFloat(form.monto);
+    if (!form.monto || montoNum <= 0) return Swal.fire("Monto inválido", "Ingresa un monto mayor a 0", "warning");
     if (!form.concepto.trim()) return Swal.fire("Falta el concepto", "Describe el motivo del movimiento", "warning");
 
     setLoading(true);
     try {
+      // 1. Registrar en Movimientos de Caja
       await axios.post("/caja/movimiento", {
         negocio_id: negocioId,
         turno_id: turnoActual?.id || null,
         usuario_id: user?.id,
         tipo: tipoModal,
-        monto: parseFloat(form.monto),
+        monto: montoNum,
         concepto: form.concepto
       });
+
+      // 2. Sincronización Automática: Si es egreso, también registrar en Gastos Generales
+      if (tipoModal === 'egreso') {
+        try {
+          await crearGasto({
+            motivo: `[CAJA] ${form.concepto}`,
+            costo: montoNum,
+            recibio: user?.nombre || "Caja (Egreso)",
+            id_negocio: negocioId
+          });
+        } catch (errGasto) {
+          console.error("Error sincronizando con Gastos:", errGasto);
+        }
+      }
+
       setShowModal(false);
       Swal.fire({
         toast: true, position: "top-end", icon: "success",
-        title: `${tipoModal === "ingreso" ? "Ingreso" : "Egreso"} registrado`,
+        title: `${tipoModal === "ingreso" ? "Ingreso" : "Egreso"} registrado y sincronizado`,
         showConfirmButton: false, timer: 2000
       });
       cargarDatos();
@@ -119,15 +138,33 @@ export default function GestionCaja() {
 
   return (
     <div className="p-6 space-y-4">
-      <h1 className="text-3xl font-bold text-purple-900">Gestión de Caja</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-3xl font-bold text-purple-900">Gestión de Caja</h1>
+        <div className="relative group">
+          <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-black cursor-help hover:bg-purple-600 hover:text-white transition-all">?</span>
+          <div className="absolute top-full left-0 mt-2 w-64 p-4 bg-gray-900 text-white text-[10px] rounded-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100] shadow-2xl">
+            <p className="font-bold text-fuchsia-400 mb-2 uppercase tracking-widest">Guía de Caja</p>
+            <ul className="space-y-2 list-disc pl-3">
+              <li><b>Balance Neto:</b> Efectivo que debería haber físicamente en caja ahora mismo.</li>
+              <li><b>Ingresos/Egresos:</b> Entradas (como cambio inicial) o salidas (pagos rápidos) de dinero manuales.</li>
+              <li><b>Conciliación:</b> Proceso para comparar lo que el sistema dice contra lo que el empleado entrega.</li>
+            </ul>
+            <div className="absolute bottom-full left-3 border-8 border-transparent border-b-gray-900"></div>
+          </div>
+        </div>
+      </div>
+      
       <p className="text-sm text-gray-500 -mt-2">
         {turnoActual ? `Turno activo · ${balance.num_movimientos} movimiento${balance.num_movimientos !== 1 ? 's' : ''}` : 'Sin turno activo — mostrando todos los movimientos'}
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="bg-fuchsia-600 text-white rounded-xl px-4 py-3 border border-fuchsia-700">
+        <div className="bg-fuchsia-600 text-white rounded-xl px-4 py-3 border border-fuchsia-700 relative group">
           <p className="text-[10px] font-black uppercase tracking-widest opacity-90">Balance neto</p>
           <p className="text-2xl font-black mt-1">{balance.balance_neto >= 0 ? '' : '-'}{formatCurrency(Math.abs(balance.balance_neto))}</p>
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+             <span className="text-[8px] bg-white/20 px-2 py-1 rounded-lg font-bold">Ventas + Ingresos - Egresos</span>
+          </div>
         </div>
         <div className="bg-white rounded-xl px-4 py-3 border border-fuchsia-200">
           <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Ingresos</p>
@@ -142,36 +179,48 @@ export default function GestionCaja() {
       <div className="flex flex-col md:flex-row gap-3">
         <button
           onClick={() => abrirModal("ingreso")}
-          className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-lg font-semibold transition-all"
+          className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-lg font-semibold transition-all shadow-md shadow-emerald-50"
         >
           <FaPlus /> Registrar Ingreso
         </button>
         <button
           onClick={() => abrirModal("egreso")}
-          className="flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-600 text-white px-4 py-2.5 rounded-lg font-semibold transition-all"
+          className="flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-600 text-white px-4 py-2.5 rounded-lg font-semibold transition-all shadow-md shadow-rose-50"
         >
           <FaMinus /> Registrar Egreso
         </button>
       </div>
 
       <div className="space-y-3">
-        <h2 className="text-lg font-bold text-purple-900">Cortes del Día (Conciliación)</h2>
+        <div className="flex items-center gap-2">
+           <h2 className="text-lg font-bold text-purple-900">Cortes del Día (Conciliación)</h2>
+           <div className="relative group">
+              <span className="text-gray-300 hover:text-fuchsia-600 cursor-help text-xs">ⓘ</span>
+              <div className="absolute top-full left-0 mt-2 w-56 p-3 bg-gray-900 text-white text-[9px] rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                Resumen de todos los cierres de caja hechos hoy por los empleados.
+              </div>
+           </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="bg-white rounded-xl px-4 py-3 border border-fuchsia-200">
             <p className="text-[10px] font-black uppercase tracking-widest text-fuchsia-700">Cortes cerrados</p>
             <p className="text-2xl font-black text-fuchsia-700 mt-1">{Number(resumenCortes.num_cortes || 0)}</p>
           </div>
-          <div className="bg-white rounded-xl px-4 py-3 border border-fuchsia-200">
+          <div className="bg-white rounded-xl px-4 py-3 border border-fuchsia-200 relative group">
             <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Esperado total</p>
             <p className="text-xl font-black text-blue-700 mt-1">{formatCurrency(resumenCortes.total_esperado)}</p>
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 text-blue-600 text-[7px] px-1.5 py-0.5 rounded font-bold uppercase">Cálculo Sistema</div>
           </div>
-          <div className="bg-white rounded-xl px-4 py-3 border border-fuchsia-200">
+          <div className="bg-white rounded-xl px-4 py-3 border border-fuchsia-200 relative group">
             <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Declarado total</p>
             <p className="text-xl font-black text-emerald-700 mt-1">{formatCurrency(resumenCortes.total_declarado)}</p>
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-emerald-50 text-emerald-600 text-[7px] px-1.5 py-0.5 rounded font-bold uppercase">Contado por Empleado</div>
           </div>
-          <div className="bg-white rounded-xl px-4 py-3 border border-fuchsia-200">
+          <div className="bg-white rounded-xl px-4 py-3 border border-fuchsia-200 relative group">
             <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700">Real admin total</p>
             <p className="text-xl font-black text-indigo-700 mt-1">{formatCurrency(resumenCortes.total_real_admin)}</p>
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-indigo-50 text-indigo-600 text-[7px] px-1.5 py-0.5 rounded font-bold uppercase">Confirmado por Ti</div>
           </div>
           <div className="bg-white rounded-xl px-4 py-3 border border-fuchsia-200">
             <p className="text-[10px] font-black uppercase tracking-widest text-rose-700">Ajuste / diferencia</p>

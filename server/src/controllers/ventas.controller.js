@@ -195,6 +195,23 @@ export const crearDetalle = async (req, res) => {
 
               (async () => {
                 try {
+                  const saleData = await queryTx(
+                    `SELECT v.total, v.metodo_pago, n.nombre as nombre_negocio 
+                     FROM ventas v 
+                     JOIN negocios n ON n.id = v.id_negocio 
+                     WHERE v.id = ?`, [ventaId]
+                  );
+
+                  const sale = saleData?.[0];
+
+                  // Notificar si es transferencia
+                  if (sale && sale.metodo_pago === 'Transferencia') {
+                    await TelegramService.sendTransferNotification(id_negocio, {
+                      negocioNombre: sale.nombre_negocio,
+                      total: sale.total
+                    });
+                  }
+
                   const lowStockProducts = await queryTx(
                     `SELECT id, producto, stock
                      FROM inventario
@@ -220,7 +237,7 @@ export const crearDetalle = async (req, res) => {
                     insumos: lowStockInsumos,
                   });
                 } catch (telegramError) {
-                  console.error('Error enviando alerta de stock por Telegram:', telegramError.message || telegramError);
+                  console.error('Error enviando notificaciones por Telegram:', telegramError.message || telegramError);
                 }
               })();
 

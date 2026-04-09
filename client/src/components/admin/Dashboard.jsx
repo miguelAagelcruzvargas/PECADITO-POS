@@ -4,18 +4,13 @@ import { useVentas } from "../../context/VentasContext";
 import { useClientes } from "../../context/ClientesContext";
 import { usePedidos } from "../../context/PedidosContext";
 import { useInventario } from "../../context/InventarioContext";
-import LowStockAlert from "../LowStockAlert";
-
 import TurnoControl from "../../components/admin/TurnoControl";
 
 export default function Dashboard() {
 
   const { getTopProductosMes, masvendidos, totalGeneral, getTotalGeneral } = useVentas();
-
   const { getValorid, clientes } = useClientes();
-
   const { getValorid: getValoridPedidos, pedidos } = usePedidos();
-
   const { getValorid: getValoridInventario, inventario, getAlertasId, alertas } = useInventario();
 
   useEffect(() => {
@@ -27,11 +22,8 @@ export default function Dashboard() {
     getAlertasId()
   }, []);
 
-  console.log(alertas);
-
   return (
     <div className="px-3 py-4 sm:px-4 md:p-6 space-y-4 md:space-y-6">
-      <LowStockAlert items={alertas} />
       <h2 className="text-2xl md:text-3xl font-bold text-green-900">Bienvenid@</h2>
       
       <TurnoControl />

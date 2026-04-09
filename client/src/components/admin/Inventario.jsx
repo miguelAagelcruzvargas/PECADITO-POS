@@ -278,28 +278,46 @@ const Inventario = () => {
   return (
     <div className="flex-1 p-3 md:p-6 bg-pink-50/20 flex flex-col h-[calc(100dvh-88px)] overflow-hidden">
       
-      <header className="flex flex-col md:flex-row md:items-center justify-between mb-4 md:mb-6 gap-4 shrink-0">
-        <div>
+      <header className="flex flex-col md:flex-row md:items-center justify-between mb-4 md:mb-6 gap-4 shrink-0 px-1">
+        <div className="flex-1">
            <h1 className="text-3xl font-black text-pink-700 tracking-tighter flex items-center gap-3 uppercase">
               <FaBoxOpen /> Inventario Gourmet
            </h1>
-           <p className="text-gray-500 font-medium italic">Controla tu stock y lo que ven tus clientes en el menú.</p>
+           <p className="text-gray-500 font-medium italic text-sm">Controla tu stock y lo que ven tus clientes en el menú.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Botón Productos con Ayuda */}
+          <div className="relative group">
+            <button
+              className={`px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 ${vista === 'productos' ? 'bg-pink-600 text-white border-pink-600 shadow-lg shadow-pink-100' : 'bg-white text-pink-600 border-pink-200 hover:bg-pink-50'}`}
+              onClick={() => setVista('productos')}
+            >
+              Productos
+            </button>
+            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 p-3 bg-gray-900 text-white text-[9px] rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[999] shadow-2xl pointer-events-none">
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-gray-900"></div>
+              <p className="font-bold text-pink-400 mb-1 uppercase tracking-tighter">Gestión de Postres</p>
+              Aquí creas los productos finales que vendes. Puedes configurar precios, fotos y decidir si aparecen en el Menú QR.
+            </div>
+          </div>
+
+          {/* Botón Insumos con Ayuda */}
+          <div className="relative group">
+            <button
+              className={`px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 ${vista === 'insumos' ? 'bg-pink-600 text-white border-pink-600 shadow-lg shadow-pink-100' : 'bg-white text-pink-600 border-pink-200 hover:bg-pink-50'}`}
+              onClick={() => setVista('insumos')}
+            >
+              Insumos
+            </button>
+            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 p-3 bg-gray-900 text-white text-[9px] rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[999] shadow-2xl pointer-events-none">
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-gray-900"></div>
+              <p className="font-bold text-pink-400 mb-1 uppercase tracking-tighter">Materia Prima</p>
+              Controla envases (vasos, conos) y base de helado. Los insumos se descuentan automáticamente si los vinculas a un producto.
+            </div>
+          </div>
+
           <button
-            className={`px-4 py-3 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${vista === 'productos' ? 'bg-pink-600 text-white border-pink-600 shadow-lg shadow-pink-100' : 'bg-white text-pink-600 border-pink-200 hover:bg-pink-50'}`}
-            onClick={() => setVista('productos')}
-          >
-            Productos
-          </button>
-          <button
-            className={`px-4 py-3 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${vista === 'insumos' ? 'bg-pink-600 text-white border-pink-600 shadow-lg shadow-pink-100' : 'bg-white text-pink-600 border-pink-200 hover:bg-pink-50'}`}
-            onClick={() => setVista('insumos')}
-          >
-            Insumos
-          </button>
-          <button
-            className="bg-pink-600 hover:bg-pink-700 text-white font-black px-6 py-4 rounded-2xl shadow-lg shadow-pink-100 transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-widest active:scale-95"
+            className="bg-pink-600 hover:bg-pink-700 text-white font-black px-6 py-4 rounded-2xl shadow-lg shadow-pink-100 transition-all flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest active:scale-95"
             onClick={() => {
               if (vista === 'insumos') {
                 openNuevoInsumo();
@@ -433,7 +451,15 @@ const Inventario = () => {
                     <th className="px-6 py-5">Insumo</th>
                     <th className="px-6 py-5">Unidad</th>
                     <th className="px-6 py-5">Stock actual</th>
-                    <th className="px-6 py-5">Stock mínimo</th>
+                    <th className="px-6 py-5">
+                       <div className="flex items-center gap-1 group relative">
+                         Stock mínimo
+                         <span className="cursor-help text-pink-200">ⓘ</span>
+                         <div className="absolute bottom-full left-0 mb-2 w-40 p-2 bg-gray-900 text-[8px] font-bold rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                           Nivel para activar alertas de stock bajo.
+                         </div>
+                       </div>
+                    </th>
                     <th className="px-6 py-5">Estado</th>
                     <th className="px-6 py-5 text-right">Acciones</th>
                   </tr>

@@ -71,9 +71,12 @@ export const cerrarTurno = (req, res) => {
         WHERE m.negocio_id = u.negocios_id
           AND m.turno_id = t.id
           AND m.tipo = 'egreso'
-      ), 0) AS total_egresos_caja
+      ), 0) AS total_egresos_caja,
+      n.nombre AS nombre_negocio,
+      u.nombre AS nombre_empleado
     FROM turnos t
     JOIN usuarios u ON t.usuario_id = u.id
+    LEFT JOIN negocios n ON n.id = u.negocios_id
     WHERE t.id = ?
     LIMIT 1
   `;
@@ -101,11 +104,18 @@ export const cerrarTurno = (req, res) => {
     db.query(sqlCerrar, [totalVentas, totalEfectivo, totalTransferencia, montoDeclarado, id], (errCerrar) => {
       if (errCerrar) return res.status(500).json({ message: "Error al cerrar turno", errCerrar });
 
-      // Enviar resumen a Telegram de forma asíncrona
-      TelegramService.sendDailySummary(resumen.negocios_id, {
-        total: totalVentas,
-        num_ventas: Number(resumen.num_ventas_local || 0) + Number(resumen.num_ventas_online || 0)
-      });
+      // Enviar reporte completo de cierre de caja a Telegram
+      TelegramService.sendShiftClosingReport(resumen.negocios_id, {
+        negocioNombre: resumen.nombre_negocio || 'Sucursal desconocida',
+        empleadoNombre: resumen.nombre_empleado || 'Empleado desconocido',
+        totalVentas: totalVentas,
+        totalEfectivo: totalEfectivo,
+        totalTransferencia: totalTransferencia,
+        totalGastos: totalEgresosCaja,
+        montoEsperado: montoEsperadoCaja,
+        montoDeclarado: montoDeclarado || 0,
+        diferencia: montoDeclarado != null ? montoDeclarado - montoEsperadoCaja : 0
+      }).catch(err => console.error("Error enviando reporte de cierre a Telegram:", err));
 
       res.json({
         message: "Turno cerrado correctamente",
